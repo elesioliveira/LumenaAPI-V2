@@ -1,0 +1,6 @@
+@LumenaAPI_HostAddress = http://localhost:5037
+
+GET {{LumenaAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
