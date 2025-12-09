@@ -22,6 +22,7 @@ public class EmpresaController : ControllerBase
     {
         await using var conn = NovaConexao();
         await conn.OpenAsync();
+        var response = new Response<string>();
 
         await using var transaction = await conn.BeginTransactionAsync();
 
@@ -71,32 +72,23 @@ public class EmpresaController : ControllerBase
 
             // Se chegou até aqui, comita
             await transaction.CommitAsync();
-
-            return Ok(new
-            {
-                success = true,
-                message = "Empresa e usuário cadastrados com sucesso!",
-                empresaId
-            });
+            response.Success = true;
+            response.Message = "Empresa e usuário cadastrados com sucesso.";
+            return Ok(response); ;
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
             await transaction.RollbackAsync();
-            return BadRequest(new
-            {
-                sucesso = false,
-                mensagem = $"Erro: campo único duplicado → {ex.Detail}"
-            });
+            response.Success = false;
+            response.Message = $"Erro: campo único duplicado → {ex.Detail}";
+            return BadRequest(response);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            return StatusCode(500, new
-            {
-                sucesso = false,
-                mensagem = "Erro ao cadastrar empresa",
-                erro = ex.Message
-            });
+            response.Success = false;
+            response.Message = $"Erro ao cadastrar empresa: {ex.Message}";
+            return StatusCode(500, response);
         }
     }
 

@@ -14,9 +14,9 @@ public class JwtService
     public JwtService(IConfiguration config)
     {
         _config = config;
-        _key = Encoding.UTF8.GetBytes(_config["Jwt:Key"]);
-        _issuer = _config["Jwt:Issuer"];
-        _audience = _config["Jwt:Audience"];
+        _key = Encoding.UTF8.GetBytes(_config["Jwt:Key"]!);
+        _issuer = _config["Jwt:Issuer"]!;
+        _audience = _config["Jwt:Audience"]!;
         _accessMinutes = int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15");
     }
 

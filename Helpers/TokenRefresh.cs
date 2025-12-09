@@ -35,7 +35,7 @@ public class RefreshTokenRepository : IRefreshTokenRepository
 
     public RefreshTokenRepository(IConfiguration config)
     {
-        _conn = config.GetConnectionString("DefaultConnection");
+        _conn = config.GetConnectionString("DefaultConnection")!;
     }
 
     public async Task SaveAsync(int usuarioId, string tokenHash, DateTime expiresAt)

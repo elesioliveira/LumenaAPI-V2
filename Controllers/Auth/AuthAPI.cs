@@ -15,7 +15,7 @@ public class AuthController : ControllerBase
     public AuthController(IConfiguration config, JwtService jwt, IRefreshTokenRepository refreshRepo)
     {
         _config = config;
-        _conn = config.GetConnectionString("DefaultConnection");
+        _conn = config.GetConnectionString("DefaultConnection")!;
         _jwt = jwt;
         _refreshRepo = refreshRepo;
     }
@@ -26,6 +26,7 @@ public class AuthController : ControllerBase
         // validar entrada básica omitted...
         await using var conn = new NpgsqlConnection(_conn);
         await conn.OpenAsync();
+        var response = new Response<UsuarioEntity>();
 
         var sql = @"
             SELECT id, empresa_id, data_cadastro, nome, email, senha_hash, salt, ativo
@@ -44,7 +45,12 @@ public class AuthController : ControllerBase
             await using var reader = await cmd.ExecuteReaderAsync();
 
             if (!await reader.ReadAsync())
-                return Unauthorized(new Response<UsuarioEntity>(false, "Usuário ou senha incorretos."));
+            {
+                response.Success = false;
+                response.Message = "Usuário ou senha incorretos.";
+                return Unauthorized(response);
+            }
+
 
             usuario = new UsuarioEntity
             {
@@ -61,10 +67,20 @@ public class AuthController : ControllerBase
         }
 
         if (!usuario.ativo)
-            return Unauthorized(new Response<UsuarioEntity>(false, "Usuário inexistente/desativado."));
+        {
+            response.Success = false;
+            response.Message = "Usuário inexistente/desativado.";
+            return Unauthorized(response);
+        }
+
 
         if (!PasswordHasher.VerifyPassword(dto.Senha, senhaHash, salt))
-            return Unauthorized(new Response<UsuarioEntity>(false, "Usuário ou senha incorretos."));
+        {
+            response.Success = false;
+            response.Message = "Usuário ou senha incorretos.";
+            return Unauthorized(response);
+        }
+
 
         // Gerar access token
         var jwtToken = _jwt.GenerateToken(usuario.id, usuario.empresaid);
@@ -95,21 +111,33 @@ public class AuthController : ControllerBase
 
         Response.Cookies.Append("access_token", jwtToken, accessCookieOptions);
         Response.Cookies.Append("refresh_token", refreshTokenPlain, refreshCookieOptions); // plain cookie; server stores only hash
-
-        return Ok(new Response<UsuarioEntity>(true, "Login realizado com sucesso.", usuario));
+        response.Success = true;
+        response.Message = "Login realizado com sucesso.";
+        response.Data = usuario;
+        return Ok(response);
     }
 
     [HttpPost("Refresh")]
     public async Task<IActionResult> Refresh()
     {
+        var response = new Response<string>();
         if (!Request.Cookies.TryGetValue("refresh_token", out var refreshPlain))
-            return Unauthorized(new Response<string>(false, "Refresh token ausente."));
+        {
+            response.Success = false;
+            response.Message = "Refresh token ausente.";
+            return Unauthorized(response);
+        }
+
 
         var refreshHash = RefreshTokenHelper.HashToken(refreshPlain);
 
         var (tokenId, usuarioId) = await _refreshRepo.ValidateAndGetOwnerAsync(refreshHash);
         if (tokenId == 0)
-            return Unauthorized(new Response<string>(false, "Refresh token inválido ou expirado."));
+        {
+            response.Success = false;
+            response.Message = "Refresh token inválido ou expirado.";
+            return Unauthorized(response);
+        }
 
         // Re-generate tokens
         // (fetch minimal user info for JWT claims)
@@ -122,7 +150,11 @@ public class AuthController : ControllerBase
             cmd.Parameters.AddWithValue("id", usuarioId);
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
-                return Unauthorized(new Response<string>(false, "Usuário não encontrado."));
+            {
+                response.Success = false;
+                response.Message = "Usuário não encontrado.";
+                return Unauthorized(response);
+            }
 
             usuario = new UsuarioEntity
             {
@@ -136,7 +168,11 @@ public class AuthController : ControllerBase
         }
 
         if (!usuario.ativo)
-            return Unauthorized(new Response<string>(false, "Usuário desativado."));
+        {
+            response.Success = false;
+            response.Message = "Usuário não encontrado/desativado.";
+            return Unauthorized(response);
+        }
 
         var newJwt = _jwt.GenerateToken(usuario.id, usuario.empresaid);
         var newRefreshPlain = RefreshTokenHelper.GenerateRefreshToken();
@@ -165,12 +201,15 @@ public class AuthController : ControllerBase
         Response.Cookies.Append("access_token", newJwt, accessCookieOptions);
         Response.Cookies.Append("refresh_token", newRefreshPlain, refreshCookieOptions);
 
-        return Ok(new Response<string>(true, "Tokens atualizados."));
+        response.Success = true;
+        response.Message = "Tokens atualizados.";
+        return Ok(response);
     }
 
     [HttpPost("Logout")]
     public async Task<IActionResult> Logout()
     {
+        var response = new Response<string>();
         // Optionally revoke refresh token from DB based on cookie
         if (Request.Cookies.TryGetValue("refresh_token", out var refreshPlain))
         {
@@ -186,7 +225,95 @@ public class AuthController : ControllerBase
         // Remove cookies
         Response.Cookies.Delete("access_token");
         Response.Cookies.Delete("refresh_token");
+        response.Success = true;
+        response.Message = "Logout realizado.";
 
-        return Ok(new Response<string>(true, "Logout realizado."));
+        return Ok(response);
     }
+
+
+    [HttpPost("Post/ForgotPassword")]
+    public async Task<IActionResult> ForgotPassword([FromBody] string email, [FromServices] IEmailService emailService)
+    {
+        var response = new Response<string>();
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            response.Success = false;
+            response.Message = "E-mail inválido.";
+            return BadRequest(response);
+        }
+
+        await using var conn = new NpgsqlConnection(_conn);
+        await conn.OpenAsync();
+
+        try
+        {
+            await using var transaction = await conn.BeginTransactionAsync();
+
+            //  Buscar usuário pelo email
+            const string queryUser = "SELECT id FROM usuario WHERE email = @email;";
+            int usuarioId = 0;
+
+            await using (var cmd = new NpgsqlCommand(queryUser, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@email", email.Trim());
+                var result = await cmd.ExecuteScalarAsync();
+
+                if (result == null)
+                {
+                    response.Success = false;
+                    response.Message = "E-mail não encontrado.";
+                    return NotFound(response);
+                }
+
+                usuarioId = Convert.ToInt32(result);
+            }
+
+            //  Gerar token de recuperação seguro
+            string token = TokenGenerator.GenerateRecoveryToken();
+            DateTime expiraEm = DateTime.UtcNow.AddMinutes(30);
+
+            //  Salvar token no banco
+            const string queryInsert = @"insert into forgot_password_keys (chave_gerada, email) values (@chave_gerada, @email); ";
+
+            await using (var cmd = new NpgsqlCommand(queryInsert, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@chave_gerada", token);
+                cmd.Parameters.AddWithValue("@email", email);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            //  Criar link público
+            string linkRecuperacao = $"http://localhost:3000/reset-password/{token}";
+
+            //  Montar corpo do email
+            string corpoHtml = $@"
+            <h2>Recuperação de Senha</h2>
+            <p>Você solicitou a recuperação de sua senha.</p>
+            <p>Clique no link abaixo para criar uma nova senha:</p>
+            <p><a href='{linkRecuperacao}'>{linkRecuperacao}</a></p>
+            <p>Este link expira em 30 minutos.</p>
+        ";
+
+            //  Enviar email
+            await emailService.EnviarEmailAsync(email, "Recuperação de Senha", corpoHtml);
+
+            response.Success = true;
+            response.Message = "Link de recuperação enviado para o e-mail informado.";
+            response.Data = null;
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.Message = $"Erro ao processar solicitação: {ex.Message}";
+            return StatusCode(500, response);
+        }
+    }
+
+
 }
