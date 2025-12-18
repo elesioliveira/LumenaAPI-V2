@@ -97,15 +97,15 @@ public class AuthController : ControllerBase
         var accessCookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = false, // production: true (requires HTTPS)
-            SameSite = SameSiteMode.Strict,
+            Secure = true, // production: true (requires HTTPS)
+            SameSite = SameSiteMode.None,
             Expires = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15"))
         };
         var refreshCookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = false,
-            SameSite = SameSiteMode.Strict,
+            Secure = true,
+            SameSite = SameSiteMode.None,
             Expires = refreshExpires
         };
 
