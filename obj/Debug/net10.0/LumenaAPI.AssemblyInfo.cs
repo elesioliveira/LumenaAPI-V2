@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LumenaAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a4366603cca0ad5965608acb761f16ea36de2937")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8c2f6afcccded2760c753aca5ea6f0015916b635")]
 [assembly: System.Reflection.AssemblyProductAttribute("LumenaAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LumenaAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

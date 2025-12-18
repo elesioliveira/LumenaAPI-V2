@@ -121,6 +121,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Refresh()
     {
         var response = new Response<string>();
+
         if (!Request.Cookies.TryGetValue("refresh_token", out var refreshPlain))
         {
             response.Success = false;
@@ -128,26 +129,32 @@ public class AuthController : ControllerBase
             return Unauthorized(response);
         }
 
-
         var refreshHash = RefreshTokenHelper.HashToken(refreshPlain);
 
-        var (tokenId, usuarioId) = await _refreshRepo.ValidateAndGetOwnerAsync(refreshHash);
-        if (tokenId == 0)
+        var (tokenId, usuarioId) =
+            await _refreshRepo.ValidateAndGetOwnerAsync(refreshHash);
+
+        if (tokenId == 0 || usuarioId == 0)
         {
             response.Success = false;
             response.Message = "Refresh token inválido ou expirado.";
             return Unauthorized(response);
         }
 
-        // Re-generate tokens
-        // (fetch minimal user info for JWT claims)
         UsuarioEntity usuario;
         await using (var conn = new NpgsqlConnection(_conn))
         {
             await conn.OpenAsync();
-            const string sqlUser = "SELECT id, empresa_id, nome, email, rotas, ativo, data_cadastro FROM usuario WHERE id = @id LIMIT 1;";
-            await using var cmd = new NpgsqlCommand(sqlUser, conn);
+            const string sql = @"
+            SELECT id, empresa_id, nome, email, ativo, data_cadastro
+            FROM usuario
+            WHERE id = @id
+            LIMIT 1;
+        ";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("id", usuarioId);
+
             await using var reader = await cmd.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
             {
@@ -160,46 +167,55 @@ public class AuthController : ControllerBase
             {
                 id = reader.GetInt32(0),
                 empresaid = reader.GetInt32(1),
-                datacadastro = reader.GetDateTime(2),
-                nome = reader.GetString(3),
-                email = reader.GetString(4),
-                ativo = reader.GetBoolean(6)
+                nome = reader.GetString(2),
+                email = reader.GetString(3),
+                ativo = reader.GetBoolean(4),
+                datacadastro = reader.GetDateTime(5)
             };
         }
 
         if (!usuario.ativo)
         {
             response.Success = false;
-            response.Message = "Usuário não encontrado/desativado.";
+            response.Message = "Usuário desativado.";
             return Unauthorized(response);
         }
 
+        // Tokens
         var newJwt = _jwt.GenerateToken(usuario.id, usuario.empresaid);
         var newRefreshPlain = RefreshTokenHelper.GenerateRefreshToken();
         var newRefreshHash = RefreshTokenHelper.HashToken(newRefreshPlain);
-        var newRefreshExpires = DateTime.UtcNow.AddDays(int.Parse(_config["Jwt:RefreshTokenDays"] ?? "7"));
+        var newRefreshExpires = DateTime.UtcNow.AddDays(
+            int.Parse(_config["Jwt:RefreshTokenDays"] ?? "7")
+        );
 
-        // Replace old token (revoke old + insert new) safely
-        await _refreshRepo.ReplaceTokenAsync(usuario.id, refreshHash, newRefreshHash, newRefreshExpires);
+        await _refreshRepo.ReplaceTokenAsync(
+            usuario.id,
+            refreshHash,
+            newRefreshHash,
+            newRefreshExpires
+        );
 
-        // Set cookies again
-        var accessCookieOptions = new CookieOptions
+        var accessOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = false,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15"))
+            Secure = true, // PROD
+            SameSite = SameSiteMode.None,
+            Expires = DateTime.UtcNow.AddMinutes(
+                int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15")
+            )
         };
-        var refreshCookieOptions = new CookieOptions
+
+        var refreshOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = false,
-            SameSite = SameSiteMode.Strict,
+            Secure = true,
+            SameSite = SameSiteMode.None,
             Expires = newRefreshExpires
         };
 
-        Response.Cookies.Append("access_token", newJwt, accessCookieOptions);
-        Response.Cookies.Append("refresh_token", newRefreshPlain, refreshCookieOptions);
+        Response.Cookies.Append("access_token", newJwt, accessOptions);
+        Response.Cookies.Append("refresh_token", newRefreshPlain, refreshOptions);
 
         response.Success = true;
         response.Message = "Tokens atualizados.";
