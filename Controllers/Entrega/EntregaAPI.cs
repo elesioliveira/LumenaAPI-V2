@@ -6,11 +6,11 @@ using System.Security.Claims;
 
 [ApiController]
 [Route("API/V1")]
-public class CategoriaController : ControllerBase
+public class EntregaController : ControllerBase
 {
     private readonly IConfiguration _config;
 
-    public CategoriaController(IConfiguration config)
+    public EntregaController(IConfiguration config)
     {
         _config = config;
     }
@@ -19,8 +19,8 @@ public class CategoriaController : ControllerBase
         => new(_config.GetConnectionString("DefaultConnection"));
 
     [Authorize]
-    [HttpPost("Post/Create/Category")]
-    public async Task<IActionResult> CreateCategory([FromBody] CategoryDTO dto)
+    [HttpPost("Post/Create/Entrega")]
+    public async Task<IActionResult> CreateEntrega([FromBody] EntregaDTO dto)
     {
         await using var conn = NovaConexao(); // deve retornar NpgsqlConnection
         await conn.OpenAsync();
@@ -31,15 +31,15 @@ public class CategoriaController : ControllerBase
 
         try
         {
-            const string queryInsertFornecedor = @"insert into categoria (empresa_id,nome, descricao) values (@empresa_id,@nome, @descricao)";
+            const string queryInsertFornecedor = @"insert into metodo_entrega (empresa_id, nome, prazo, custo_base) values
+            (@empresa_id, @nome, @prazo, @custo_base)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
             {
                 cmd.Parameters.AddWithValue("@empresa_id", empresaId);
                 cmd.Parameters.AddWithValue("@nome", dto.nome);
-                cmd.Parameters.AddWithValue("@descricao", string.IsNullOrEmpty(dto.descricao) ? DBNull.Value : dto.descricao.Trim());
-
-
+                cmd.Parameters.AddWithValue("@prazo", string.IsNullOrEmpty(dto.prazo) ? DBNull.Value : dto.prazo.Trim());
+                cmd.Parameters.AddWithValue("@custo_base", dto.custo_base);
 
                 var rowsAffected = await cmd.ExecuteNonQueryAsync();
 
@@ -55,28 +55,28 @@ public class CategoriaController : ControllerBase
             await transaction.CommitAsync();
 
             response.Success = true;
-            response.Message = "Categoria cadastrado com sucesso.";
+            response.Message = "Entrega cadastrado com sucesso.";
             return Ok(response);
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = "Já existe uma categoria cadastrado com este nome.";
+            response.Message = "Já existe uma entrega cadastrado com este nome.";
             return BadRequest(response);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = $"Erro ao cadastrar fornecedor: {ex.Message}";
+            response.Message = $"Erro ao cadastrar entrega: {ex.Message}";
             return StatusCode(500, response);
         }
     }
 
     [Authorize]
-    [HttpPut("Put/Update/Category")]
-    public async Task<IActionResult> UpdateFornecedor([FromBody] CategoryEntity dto)
+    [HttpPut("Put/Update/Entrega")]
+    public async Task<IActionResult> UpdateEntrega([FromBody] EntregaEntity dto)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();
@@ -93,9 +93,10 @@ public class CategoriaController : ControllerBase
             if (!string.IsNullOrWhiteSpace(dto.nome))
                 fields.Add("nome = @nome");
 
-            if (!string.IsNullOrWhiteSpace(dto.descricao))
-                fields.Add("descricao = @descricao");
-
+            if (!string.IsNullOrWhiteSpace(dto.prazo))
+                fields.Add("prazo = @prazo");
+            if (!string.IsNullOrWhiteSpace(dto.custo_base.ToString()))
+                fields.Add("custo_base = @custo_base");
 
             fields.Add("ativo = @ativo");
 
@@ -109,7 +110,7 @@ public class CategoriaController : ControllerBase
             }
 
             var queryUpdate = $@"
-            UPDATE categoria
+            UPDATE metodo_entrega
             SET {string.Join(", ", fields)}
             WHERE id = @id
               AND empresa_id = @empresa_id;
@@ -120,8 +121,10 @@ public class CategoriaController : ControllerBase
             if (!string.IsNullOrWhiteSpace(dto.nome))
                 cmd.Parameters.AddWithValue("@nome", dto.nome.Trim());
 
-            if (!string.IsNullOrWhiteSpace(dto.descricao))
-                cmd.Parameters.AddWithValue("@descricao", dto.descricao.Trim());
+            if (!string.IsNullOrWhiteSpace(dto.prazo))
+                cmd.Parameters.AddWithValue("@prazo", dto.prazo.Trim());
+            if (!string.IsNullOrWhiteSpace(dto.custo_base.ToString()))
+                cmd.Parameters.AddWithValue("@custo_base", dto.custo_base);
 
             cmd.Parameters.AddWithValue("@ativo", dto.ativo);
 
@@ -134,61 +137,48 @@ public class CategoriaController : ControllerBase
             {
                 await transaction.RollbackAsync();
                 response.Success = false;
-                response.Message = "Categoria não encontrado ou não pertence à empresa.";
+                response.Message = "Entrega não encontrado ou não pertence à empresa.";
                 return NotFound(response);
             }
 
             await transaction.CommitAsync();
 
             response.Success = true;
-            response.Message = "Categoria atualizado com sucesso.";
+            response.Message = "Entrega atualizado com sucesso.";
             return Ok(response);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = $"Erro ao atualizar Categoria: {ex.Message}";
+            response.Message = $"Erro ao atualizar Entrega: {ex.Message}";
             return StatusCode(500, response);
         }
     }
 
     [Authorize]
-    [HttpGet("Get/Category")]
-    public async Task<IActionResult> BuscarFornecedores([FromQuery] string? search)
+    [HttpGet("Get/Entrega")]
+    public async Task<IActionResult> FetchEntrega([FromQuery] string? search)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();
 
-        var response = new Response<List<CategoryEntity>>();
-        var fornecedores = new List<CategoryEntity>();
+        var response = new Response<List<EntregaEntity>>();
+        var entregas = new List<EntregaEntity>();
         var empresaId = User.GetEmpresaId();
 
         try
         {
-            var query = @"
-SELECT
-    c.id,
-    c.empresa_id,
-    c.nome,
-    c.descricao,
-    c.data_cadastro,
-    c.ativo,
-    COUNT(p.id) AS qtd
-FROM categoria c
-LEFT JOIN produto p
-    ON p.categoria_id = c.id
-WHERE c.empresa_id = @empresa_id
-
-        ";
+            var query = @"select id, data_cadastro, ativo, nome, prazo, custo_base from metodo_entrega
+            where empresa_id =@empresa_id ";
 
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                query += " AND c.nome ILIKE '%' || @search || '%' ";
+                query += " AND nome ILIKE '%' || @search || '%' ";
             }
 
-            query += " GROUP BY c.id,c.empresa_id, c.nome, c.descricao, c.data_cadastro, c.ativo ORDER BY c.nome LIMIT 100;";
+            query += "  order by nome asc limit 100; ";
 
             await using var cmd = new NpgsqlCommand(query, conn);
             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
@@ -202,30 +192,29 @@ WHERE c.empresa_id = @empresa_id
 
             while (await reader.ReadAsync())
             {
-                fornecedores.Add(new CategoryEntity
+                entregas.Add(new EntregaEntity
                 {
                     id = reader.GetInt32(reader.GetOrdinal("id")),
-                    empresa_id = reader.GetInt32(reader.GetOrdinal("empresa_id")),
                     nome = reader.GetString(reader.GetOrdinal("nome")).Trim(),
-                    descricao = reader.IsDBNull(reader.GetOrdinal("descricao")) ? null : reader.GetString(reader.GetOrdinal("descricao")).Trim(),
+                    prazo = reader.IsDBNull(reader.GetOrdinal("prazo")) ? null : reader.GetString(reader.GetOrdinal("prazo")).Trim(),
                     ativo = reader.GetBoolean(reader.GetOrdinal("ativo")),
+                    custo_base = reader.GetDecimal(reader.GetOrdinal("custo_base")),
                     data_cadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
-                    qtd = reader.GetInt32("qtd")
                 });
             }
 
             response.Success = true;
-            response.Data = fornecedores;
-            response.Message = fornecedores.Count == 0
-                ? "Nenhuma categoria encontrado."
-                : "Categorias encontradas com sucesso.";
+            response.Data = entregas;
+            response.Message = entregas.Count == 0
+                ? "Nenhuma entrega encontrado."
+                : "Entregas encontradas com sucesso.";
 
             return Ok(response);
         }
         catch (Exception ex)
         {
             response.Success = false;
-            response.Message = $"Erro ao buscar Categorias: {ex.Message}";
+            response.Message = $"Erro ao buscar Entregas: {ex.Message}";
             return StatusCode(500, response);
         }
     }

@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
@@ -6,11 +7,11 @@ using System.Security.Claims;
 
 [ApiController]
 [Route("API/V1")]
-public class CategoriaController : ControllerBase
+public class CanalVendaAPI : ControllerBase
 {
     private readonly IConfiguration _config;
 
-    public CategoriaController(IConfiguration config)
+    public CanalVendaAPI(IConfiguration config)
     {
         _config = config;
     }
@@ -19,8 +20,8 @@ public class CategoriaController : ControllerBase
         => new(_config.GetConnectionString("DefaultConnection"));
 
     [Authorize]
-    [HttpPost("Post/Create/Category")]
-    public async Task<IActionResult> CreateCategory([FromBody] CategoryDTO dto)
+    [HttpPost("Post/Create/CanalVenda")]
+    public async Task<IActionResult> CreateCanalVenda([FromBody] CanalVendaDTO dto)
     {
         await using var conn = NovaConexao(); // deve retornar NpgsqlConnection
         await conn.OpenAsync();
@@ -31,13 +32,13 @@ public class CategoriaController : ControllerBase
 
         try
         {
-            const string queryInsertFornecedor = @"insert into categoria (empresa_id,nome, descricao) values (@empresa_id,@nome, @descricao)";
+            const string queryInsertFornecedor = @"insert into canal_de_venda (empresa_id,nome, tipo) values (@empresa_id,@nome, @tipo)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
             {
                 cmd.Parameters.AddWithValue("@empresa_id", empresaId);
                 cmd.Parameters.AddWithValue("@nome", dto.nome);
-                cmd.Parameters.AddWithValue("@descricao", string.IsNullOrEmpty(dto.descricao) ? DBNull.Value : dto.descricao.Trim());
+                cmd.Parameters.AddWithValue("@tipo", string.IsNullOrEmpty(dto.tipo) ? DBNull.Value : dto.tipo.Trim());
 
 
 
@@ -55,28 +56,28 @@ public class CategoriaController : ControllerBase
             await transaction.CommitAsync();
 
             response.Success = true;
-            response.Message = "Categoria cadastrado com sucesso.";
+            response.Message = "Canal de venda cadastrado com sucesso.";
             return Ok(response);
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = "Já existe uma categoria cadastrado com este nome.";
+            response.Message = "Já existe uma marca cadastrado com este nome.";
             return BadRequest(response);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = $"Erro ao cadastrar fornecedor: {ex.Message}";
+            response.Message = $"Erro ao cadastrar canal de venda: {ex.Message}";
             return StatusCode(500, response);
         }
     }
 
     [Authorize]
-    [HttpPut("Put/Update/Category")]
-    public async Task<IActionResult> UpdateFornecedor([FromBody] CategoryEntity dto)
+    [HttpPut("Put/Update/CanalVenda")]
+    public async Task<IActionResult> UpdateCanalVenda([FromBody] CanalVendaEntity dto)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();
@@ -93,9 +94,8 @@ public class CategoriaController : ControllerBase
             if (!string.IsNullOrWhiteSpace(dto.nome))
                 fields.Add("nome = @nome");
 
-            if (!string.IsNullOrWhiteSpace(dto.descricao))
-                fields.Add("descricao = @descricao");
-
+            if (!string.IsNullOrWhiteSpace(dto.tipo))
+                fields.Add("tipo = @tipo");
 
             fields.Add("ativo = @ativo");
 
@@ -109,7 +109,7 @@ public class CategoriaController : ControllerBase
             }
 
             var queryUpdate = $@"
-            UPDATE categoria
+            UPDATE  canal_de_venda
             SET {string.Join(", ", fields)}
             WHERE id = @id
               AND empresa_id = @empresa_id;
@@ -120,8 +120,8 @@ public class CategoriaController : ControllerBase
             if (!string.IsNullOrWhiteSpace(dto.nome))
                 cmd.Parameters.AddWithValue("@nome", dto.nome.Trim());
 
-            if (!string.IsNullOrWhiteSpace(dto.descricao))
-                cmd.Parameters.AddWithValue("@descricao", dto.descricao.Trim());
+            if (!string.IsNullOrWhiteSpace(dto.tipo))
+                cmd.Parameters.AddWithValue("@tipo", dto.tipo.Trim());
 
             cmd.Parameters.AddWithValue("@ativo", dto.ativo);
 
@@ -134,50 +134,47 @@ public class CategoriaController : ControllerBase
             {
                 await transaction.RollbackAsync();
                 response.Success = false;
-                response.Message = "Categoria não encontrado ou não pertence à empresa.";
+                response.Message = "Canal de venda não encontrado ou não pertence à empresa.";
                 return NotFound(response);
             }
 
             await transaction.CommitAsync();
 
             response.Success = true;
-            response.Message = "Categoria atualizado com sucesso.";
+            response.Message = "Canal de venda atualizado com sucesso.";
             return Ok(response);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             response.Success = false;
-            response.Message = $"Erro ao atualizar Categoria: {ex.Message}";
+            response.Message = $"Erro ao atualizar Canal de venda: {ex.Message}";
             return StatusCode(500, response);
         }
     }
 
     [Authorize]
-    [HttpGet("Get/Category")]
-    public async Task<IActionResult> BuscarFornecedores([FromQuery] string? search)
+    [HttpGet("Get/CanalVenda")]
+    public async Task<IActionResult> FetchCanalVenda([FromQuery] string? search)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();
 
-        var response = new Response<List<CategoryEntity>>();
-        var fornecedores = new List<CategoryEntity>();
+        var response = new Response<List<CanalVendaEntity>>();
+        var fornecedores = new List<CanalVendaEntity>();
         var empresaId = User.GetEmpresaId();
 
         try
         {
             var query = @"
 SELECT
-    c.id,
-    c.empresa_id,
-    c.nome,
-    c.descricao,
-    c.data_cadastro,
-    c.ativo,
-    COUNT(p.id) AS qtd
-FROM categoria c
-LEFT JOIN produto p
-    ON p.categoria_id = c.id
+   c.id,
+   c.empresa_id,
+   c.nome,
+   c.tipo,
+   c.data_cadastro,
+   c.ativo
+FROM canal_de_venda c
 WHERE c.empresa_id = @empresa_id
 
         ";
@@ -188,7 +185,7 @@ WHERE c.empresa_id = @empresa_id
                 query += " AND c.nome ILIKE '%' || @search || '%' ";
             }
 
-            query += " GROUP BY c.id,c.empresa_id, c.nome, c.descricao, c.data_cadastro, c.ativo ORDER BY c.nome LIMIT 100;";
+            query += " GROUP BY c.id,c.empresa_id, c.nome, c.tipo, c.data_cadastro, c.ativo ORDER BY c.nome LIMIT 100;";
 
             await using var cmd = new NpgsqlCommand(query, conn);
             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
@@ -202,30 +199,29 @@ WHERE c.empresa_id = @empresa_id
 
             while (await reader.ReadAsync())
             {
-                fornecedores.Add(new CategoryEntity
+                fornecedores.Add(new CanalVendaEntity
                 {
                     id = reader.GetInt32(reader.GetOrdinal("id")),
                     empresa_id = reader.GetInt32(reader.GetOrdinal("empresa_id")),
                     nome = reader.GetString(reader.GetOrdinal("nome")).Trim(),
-                    descricao = reader.IsDBNull(reader.GetOrdinal("descricao")) ? null : reader.GetString(reader.GetOrdinal("descricao")).Trim(),
+                    tipo = reader.IsDBNull(reader.GetOrdinal("tipo")) ? null : reader.GetString(reader.GetOrdinal("tipo")).Trim(),
                     ativo = reader.GetBoolean(reader.GetOrdinal("ativo")),
                     data_cadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
-                    qtd = reader.GetInt32("qtd")
                 });
             }
 
             response.Success = true;
             response.Data = fornecedores;
             response.Message = fornecedores.Count == 0
-                ? "Nenhuma categoria encontrado."
-                : "Categorias encontradas com sucesso.";
+                ? "Nenhum canal de venda encontrado."
+                : "Canais de venda encontrados com sucesso.";
 
             return Ok(response);
         }
         catch (Exception ex)
         {
             response.Success = false;
-            response.Message = $"Erro ao buscar Categorias: {ex.Message}";
+            response.Message = $"Erro ao buscar Canais de Venda: {ex.Message}";
             return StatusCode(500, response);
         }
     }
