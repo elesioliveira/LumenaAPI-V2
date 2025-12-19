@@ -9,10 +9,12 @@ using System.Security.Claims;
 public class CategoriaController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly CacheHelper _cacheHelper;
 
-    public CategoriaController(IConfiguration config)
+    public CategoriaController(IConfiguration config, CacheHelper cacheHelper)
     {
         _config = config;
+        _cacheHelper = cacheHelper;
     }
 
     private NpgsqlConnection NovaConexao()
@@ -31,6 +33,7 @@ public class CategoriaController : ControllerBase
 
         try
         {
+            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             const string queryInsertFornecedor = @"insert into categoria (empresa_id,nome, descricao) values (@empresa_id,@nome, @descricao)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
@@ -76,7 +79,7 @@ public class CategoriaController : ControllerBase
 
     [Authorize]
     [HttpPut("Put/Update/Category")]
-    public async Task<IActionResult> UpdateFornecedor([FromBody] CategoryEntity dto)
+    public async Task<IActionResult> UpdateCategory([FromBody] CategoryEntity dto)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();
@@ -88,6 +91,7 @@ public class CategoriaController : ControllerBase
 
         try
         {
+            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             var fields = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(dto.nome))
@@ -155,7 +159,7 @@ public class CategoriaController : ControllerBase
 
     [Authorize]
     [HttpGet("Get/Category")]
-    public async Task<IActionResult> BuscarFornecedores([FromQuery] string? search)
+    public async Task<IActionResult> FetchCategory([FromQuery] string? search)
     {
         await using var conn = NovaConexao(); // NpgsqlConnection
         await conn.OpenAsync();

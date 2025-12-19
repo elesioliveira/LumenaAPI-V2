@@ -15,7 +15,13 @@ var keyBytes = Encoding.UTF8.GetBytes(jwtKey!);
 builder.Services.AddSingleton<JwtService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.Configure<GtinApiOptions>(
+    builder.Configuration.GetSection("GtinApi"));
+builder.Services.AddSingleton<CacheHelper>();
+builder.Services.AddMemoryCache();
 
+builder.Services.AddHttpClient<IGtinTokenService, GtinTokenService>();
+builder.Services.AddHttpClient<IGtinProdutoService, GtinProdutoService>();
 builder.Services.AddControllers();
 
 // CORS para Dev + Cookies

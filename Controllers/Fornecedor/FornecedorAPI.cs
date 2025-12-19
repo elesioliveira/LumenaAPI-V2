@@ -9,10 +9,12 @@ using System.Security.Claims;
 public class FornecedorController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly CacheHelper _cacheHelper;
 
-    public FornecedorController(IConfiguration config)
+    public FornecedorController(IConfiguration config, CacheHelper cacheHelper)
     {
         _config = config;
+        _cacheHelper = cacheHelper;
     }
 
     private NpgsqlConnection NovaConexao()
@@ -31,6 +33,7 @@ public class FornecedorController : ControllerBase
 
         try
         {
+            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             const string queryInsertFornecedor = @"
             INSERT INTO fornecedores
             (
@@ -113,6 +116,7 @@ public class FornecedorController : ControllerBase
 
         try
         {
+            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             var fields = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(fornecedor.nome))
