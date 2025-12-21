@@ -40,8 +40,8 @@ public class ProductAPI : ControllerBase
 
         try
         {
-            const string queryInsertFornecedor = @"insert into produto (empresa_id,nome,descricao,ativo,un,eanCode,marca_id,fornecedor_id,categoria_id,preco_custo,preco_venda,estoque_minimo) values
-            (@empresa_id,@nome,@descricao,@ativo,@un,@eanCode,@marca_id,@fornecedor_id,@categoria_id,@preco_custo,@preco_venda,@estoque_minimo)";
+            const string queryInsertFornecedor = @"insert into produto (empresa_id,nome,descricao,ativo,un,codigo_barras,marca_id,fornecedor_id,categoria_id,preco_custo,preco_venda,estoque_minimo) values
+            (@empresa_id,@nome,@descricao,@ativo,@un,@codigo_barras,@marca_id,@fornecedor_id,@categoria_id,@preco_custo,@preco_venda,@estoque_minimo)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
             {
@@ -50,7 +50,7 @@ public class ProductAPI : ControllerBase
                 cmd.Parameters.AddWithValue("@descricao", string.IsNullOrEmpty(dto.descricao) ? DBNull.Value : dto.descricao.Trim());
                 cmd.Parameters.AddWithValue("@ativo", dto.ativo);
                 cmd.Parameters.AddWithValue("@un", string.IsNullOrEmpty(dto.un) ? DBNull.Value : dto.un.Trim());
-                cmd.Parameters.AddWithValue("@eanCode", string.IsNullOrEmpty(dto.eanCode) ? DBNull.Value : dto.eanCode.Trim());
+                cmd.Parameters.AddWithValue("@codigo_barras", string.IsNullOrEmpty(dto.eanCode) ? DBNull.Value : dto.eanCode.Trim());
                 cmd.Parameters.AddWithValue("@marca_id", dto.marca_id);
                 cmd.Parameters.AddWithValue("@fornecedor_id", dto.fornecedor_id);
                 cmd.Parameters.AddWithValue("@categoria_id", dto.categoria_id);
@@ -105,7 +105,7 @@ public class ProductAPI : ControllerBase
 
         try
         {
-            string queryUpdateProduct = @"update produto set  nome=@nome,descricao=@descricao,ativo=@ativo,un=@un,eanCode=@eanCode,marca_id=@marca_id,fornecedor_id=@fornecedor_id,categoria_id=@categoria_id,preco_custo=@preco_custo,preco_venda=@preco_venda,estoque_minimo=@estoque_minimo
+            string queryUpdateProduct = @"update produto set  nome=@nome,descricao=@descricao,ativo=@ativo,un=@un,codigo_barras=@eanCode,marca_id=@marca_id,fornecedor_id=@fornecedor_id,categoria_id=@categoria_id,preco_custo=@preco_custo,preco_venda=@preco_venda,estoque_minimo=@estoque_minimo
             where id =@id and empresa_id=@empresa_id";
 
             await using var cmd = new NpgsqlCommand(queryUpdateProduct, conn, transaction);
@@ -162,9 +162,9 @@ public class ProductAPI : ControllerBase
         try
         {
             var query = @"
-            select p.id, p.data_cadastro, p.nome,p.ativo,p.un,p.descricao,p.codigo_barras as eanCode,m.nome as marca,f.nome as fornecedor, 
-            c.nome as categoria,
-            p.preco_un, p.estoque, p.preco_venda, p.estoque_minimo
+            select p.id, p.data_cadastro, p.nome,p.ativo,p.un,p.descricao,p.codigo_barras as eanCode,m.nome as marca,p.marca_id, p.fornecedor_id, f.nome as fornecedor, 
+            c.nome as categoria,p.categoria_id,
+            p.preco_custo, p.estoque, p.preco_venda, p.estoque_minimo
             from produto p
             left join marca m on m.id = p.marca_id
             left join categoria c on c.id = p.categoria_id
@@ -194,7 +194,6 @@ public class ProductAPI : ControllerBase
                 products.Add(new ProductEntity
                 {
                     id = reader.GetInt32(reader.GetOrdinal("id")),
-                    empresa_id = reader.GetInt32(reader.GetOrdinal("empresa_id")),
                     data_cadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
                     nome = reader.IsDBNull(reader.GetOrdinal("nome")) ? null : reader.GetString(reader.GetOrdinal("nome")).Trim(),
                     descricao = reader.IsDBNull(reader.GetOrdinal("descricao")) ? null : reader.GetString(reader.GetOrdinal("descricao")).Trim(),
@@ -207,7 +206,7 @@ public class ProductAPI : ControllerBase
                     marca_id = reader.IsDBNull(reader.GetOrdinal("marca_id")) ? null : reader.GetInt32(reader.GetOrdinal("marca_id")),
                     fornecedor = reader.IsDBNull(reader.GetOrdinal("fornecedor")) ? null : reader.GetString(reader.GetOrdinal("fornecedor")).Trim(),
                     fornecedor_id = reader.IsDBNull(reader.GetOrdinal("fornecedor_id")) ? null : reader.GetInt32(reader.GetOrdinal("fornecedor_id")),
-                    preco_custo = reader.IsDBNull(reader.GetOrdinal("preco_un")) ? null : reader.GetDecimal(reader.GetOrdinal("preco_un")),
+                    preco_custo = reader.IsDBNull(reader.GetOrdinal("preco_custo")) ? null : reader.GetDecimal(reader.GetOrdinal("preco_custo")),
                     preco_venda = reader.IsDBNull(reader.GetOrdinal("preco_venda")) ? null : reader.GetDecimal(reader.GetOrdinal("preco_venda")),
                     estoque_minimo = reader.IsDBNull(reader.GetOrdinal("estoque_minimo")) ? null : reader.GetDecimal(reader.GetOrdinal("estoque_minimo")),
 
