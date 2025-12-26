@@ -4,6 +4,7 @@ public class StockEntradaEtity
     public string nota { get; set; }
     public string tipo { get; set; }
     public string fornecedor { get; set; }
+    public string? motivo_saida { get; set; }
     public DateTime data_emissao { get; set; }
     public DateTime data_ocorrencia { get; set; }
     public decimal valor_total { get; set; }

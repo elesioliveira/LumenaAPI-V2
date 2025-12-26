@@ -309,6 +309,7 @@ public class StockAPI : ControllerBase
                 em.data_emissao,
                 em.data_ocorrencia,
                 em.valor_total,
+                em.motivo_saida,
                 COUNT(ce.id) AS total_itens
             FROM estoque_movimentacao em
             JOIN controle_estoque ce 
@@ -375,6 +376,9 @@ public class StockAPI : ControllerBase
                     nota = reader.IsDBNull(reader.GetOrdinal("nota"))
                         ? string.Empty
                         : reader.GetString(reader.GetOrdinal("nota")).Trim(),
+                    motivo_saida = reader.IsDBNull(reader.GetOrdinal("motivo_saida"))
+                        ? string.Empty
+                        : reader.GetString(reader.GetOrdinal("motivo_saida")).Trim(),
                     fornecedor = reader.IsDBNull(reader.GetOrdinal("fornecedor"))
                         ? string.Empty
                         : reader.GetString(reader.GetOrdinal("fornecedor")).Trim(),
@@ -489,6 +493,165 @@ public class StockAPI : ControllerBase
             return StatusCode(500, response);
         }
     }
+    [Authorize]
+    [HttpDelete("Delete/MovimentacaoEstoque/{movimentacaoId:int}")]
+    public async Task<IActionResult> ExcluirMovimentacaoEstoque(int movimentacaoId)
+    {
+        await using var conn = NovaConexao();
+        await conn.OpenAsync();
+
+        await using var transaction = await conn.BeginTransactionAsync();
+
+        var empresaId = User.GetEmpresaId();
+        var response = new Response<string>();
+
+        try
+        {
+            // 1️⃣ Buscar tipo da movimentação
+            const string sqlMov = @"
+            SELECT tipo
+            FROM estoque_movimentacao
+            WHERE id = @id
+              AND empresa_id = @empresa_id;
+        ";
+
+            string tipo;
+
+            await using (var cmd = new NpgsqlCommand(sqlMov, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@id", movimentacaoId);
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+
+                var result = await cmd.ExecuteScalarAsync();
+                if (result == null)
+                    return NotFound(new Response<string>
+                    {
+                        Success = false,
+                        Message = "Movimentação não encontrada."
+                    });
+
+                tipo = result.ToString()!;
+            }
+
+            // 2️⃣ Buscar itens da movimentação
+            const string sqlItens = @"
+            SELECT produto_id, quantidade
+            FROM controle_estoque
+            WHERE movimentacao_id = @movimentacao_id;
+        ";
+
+            var itens = new List<(int produtoId, int quantidade)>();
+
+            await using (var cmd = new NpgsqlCommand(sqlItens, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@movimentacao_id", movimentacaoId);
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    itens.Add((
+                        reader.GetInt32(0),
+                        reader.GetInt32(1)
+                    ));
+                }
+            }
+
+            if (itens.Count == 0)
+                throw new Exception("Movimentação não possui itens.");
+
+            // 3️⃣ Definir sinal inverso
+            // Se foi ENTRADA → remover do saldo
+            // Se foi SAIDA → devolver ao saldo
+            var sinalReverso = tipo is "ENTRADA" or "AJUSTE_POS" or "DEVOLUCAO" ? -1 : 1;
+
+            foreach (var item in itens)
+            {
+                // 3.1 🔒 Lock do saldo
+                const string lockSaldo = @"
+                SELECT saldo
+                FROM saldo_estoque
+                WHERE empresa_id = @empresa_id
+                  AND produto_id = @produto_id
+                FOR UPDATE;
+            ";
+
+                int saldoAtual;
+
+                await using (var cmdLock = new NpgsqlCommand(lockSaldo, conn, transaction))
+                {
+                    cmdLock.Parameters.AddWithValue("@empresa_id", empresaId);
+                    cmdLock.Parameters.AddWithValue("@produto_id", item.produtoId);
+
+                    var result = await cmdLock.ExecuteScalarAsync();
+                    saldoAtual = result == null ? 0 : Convert.ToInt32(result);
+                }
+
+                // 3.2 Validação de rollback
+                if (saldoAtual + (sinalReverso * item.quantidade) < 0)
+                {
+                    throw new Exception(
+                        $"Rollback inválido. Produto {item.produtoId} ficaria com saldo negativo."
+                    );
+                }
+
+                // 3.3 Atualizar saldo
+                const string updateSaldo = @"
+                UPDATE saldo_estoque
+                SET saldo = saldo + @quantidade
+                WHERE empresa_id = @empresa_id
+                  AND produto_id = @produto_id;
+            ";
+
+                await using (var cmdSaldo = new NpgsqlCommand(updateSaldo, conn, transaction))
+                {
+                    cmdSaldo.Parameters.AddWithValue("@empresa_id", empresaId);
+                    cmdSaldo.Parameters.AddWithValue("@produto_id", item.produtoId);
+                    cmdSaldo.Parameters.AddWithValue("@quantidade", sinalReverso * item.quantidade);
+                    await cmdSaldo.ExecuteNonQueryAsync();
+                }
+            }
+
+            // 4️⃣ Excluir itens
+            const string deleteItens = @"
+            DELETE FROM controle_estoque
+            WHERE movimentacao_id = @movimentacao_id;
+        ";
+
+            await using (var cmd = new NpgsqlCommand(deleteItens, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@movimentacao_id", movimentacaoId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // 5️⃣ Excluir movimentação
+            const string deleteMov = @"
+            DELETE FROM estoque_movimentacao
+            WHERE id = @id
+              AND empresa_id = @empresa_id;
+        ";
+
+            await using (var cmd = new NpgsqlCommand(deleteMov, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@id", movimentacaoId);
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            response.Success = true;
+            response.Message = "Movimentação excluída e estoque revertido com sucesso.";
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            response.Success = false;
+            response.Message = ex.Message;
+            return StatusCode(500, response);
+        }
+    }
+
 
 
 }
