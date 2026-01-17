@@ -17,7 +17,7 @@ public class JwtService
         _key = Encoding.UTF8.GetBytes(_config["Jwt:Key"]!);
         _issuer = _config["Jwt:Issuer"]!;
         _audience = _config["Jwt:Audience"]!;
-        _accessMinutes = int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15");
+        _accessMinutes = int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "1440");
     }
 
     public string GenerateToken(int userId, int empresaId)
