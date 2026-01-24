@@ -323,6 +323,70 @@ public class SaleAPI : ControllerBase
 
 
     [Authorize]
+    [HttpGet("Get/Wallet/Categoria")]
+    public async Task<IActionResult> FetchWalletCategoria([FromQuery] string search, [FromQuery] string tipo)
+    {
+        await using var conn = NovaConexao(); // NpgsqlConnection
+        await conn.OpenAsync();
+
+        var response = new Response<List<WalletCategorySalesEntity>>();
+        var clients = new List<WalletCategorySalesEntity>();
+        var empresaId = User.GetEmpresaId();
+
+        try
+        {
+            string sql = @"
+            select c.id, c.nome from categoria_wallet c
+            where c.empresa_id= @empresa_id
+            AND c.ativo = true ";
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                sql += @" AND (
+                    nome ILIKE '%' || @search || '%'
+                ) ";
+            }
+            if (!string.IsNullOrWhiteSpace(tipo))
+            {
+                sql += @" AND (
+                    tipo ILIKE '%' || @tipo || '%'
+                ) ";
+            }
+
+            sql += @" ORDER BY nome";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+
+            if (!string.IsNullOrWhiteSpace(search))
+                cmd.Parameters.AddWithValue("@search", search);
+            if (!string.IsNullOrWhiteSpace(tipo))
+                cmd.Parameters.AddWithValue("@tipo", tipo);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                clients.Add(new WalletCategorySalesEntity
+                {
+                    id = reader.GetInt32(reader.GetOrdinal("id")),
+                    nome = reader.IsDBNull(reader.GetOrdinal("nome")) ? null : reader["nome"] as string,
+                });
+            }
+
+            response.Success = true;
+            response.Data = clients;
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.Message = $"Erro ao buscar clientes: {ex.Message}";
+            return StatusCode(500, response);
+        }
+    }
+    [Authorize]
     [HttpGet("Get/Sales/Client")]
     public async Task<IActionResult> FetchClient([FromQuery] string search)
     {
