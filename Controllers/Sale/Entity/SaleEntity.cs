@@ -15,6 +15,12 @@ public class ClientSalesEntity
     public int desconto { get; set; }
 }
 
+public class FornecedorWalletEntity
+{
+    public int id {get;set;}
+    public string? nome {get;set;}
+}
+
 public class WalletCategorySalesEntity
 {
     public int id { get; set; }

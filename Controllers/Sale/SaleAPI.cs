@@ -452,6 +452,69 @@ public class SaleAPI : ControllerBase
             return StatusCode(500, response);
         }
     }
+    [Authorize]
+    [HttpGet("Get/Sales/Fornecedores")]
+    public async Task<IActionResult> FetchFornecedor([FromQuery] string search)
+    {
+        await using var conn = NovaConexao(); // NpgsqlConnection
+        await conn.OpenAsync();
+
+        var response = new Response<List<FornecedorWalletEntity>>();
+        var fornecedores = new List<FornecedorWalletEntity>();
+        var empresaId = User.GetEmpresaId();
+
+        try
+        {
+            string sql = @"
+            SELECT 
+                f.id,
+                f.nome
+            FROM fornecedores f
+            WHERE f.empresa_id = @empresa_id AND f.ativo =true
+        ";
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                sql += @"
+                AND (
+                    f.nome ILIKE '%' || @search || '%'
+                    OR f.cnpj    ILIKE '%' || @search || '%'
+                    OR f.email ILIKE '%' || @search || '%'
+                )
+            ";
+            }
+
+            sql += @" ORDER BY f.nome";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+
+            if (!string.IsNullOrWhiteSpace(search))
+                cmd.Parameters.AddWithValue("@search", search);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                fornecedores.Add(new FornecedorWalletEntity
+                {
+                    id = reader.GetInt32(reader.GetOrdinal("id")),
+                    nome = reader.IsDBNull(reader.GetOrdinal("nome")) ? null : reader["nome"] as string,
+                });
+            }
+
+            response.Success = true;
+            response.Data = fornecedores;
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            response.Success = false;
+            response.Message = $"Erro ao buscar clientes: {ex.Message}";
+            return StatusCode(500, response);
+        }
+    }
 
 
 

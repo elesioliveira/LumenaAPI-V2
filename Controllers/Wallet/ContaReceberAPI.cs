@@ -265,7 +265,7 @@ public async Task<IActionResult> FetchWalletConta( [FromQuery] string? search,[F
         w.observacao,
         w.origem_tipo
     FROM wallet w
-    INNER JOIN cliente c ON c.id = w.cliente_id
+    LEFT JOIN cliente c ON c.id = w.cliente_id
     INNER JOIN categoria_wallet ca ON ca.id = w.categoria_id
     WHERE
         w.empresa_id = @empresa_id
@@ -287,17 +287,24 @@ public async Task<IActionResult> FetchWalletConta( [FromQuery] string? search,[F
                 AND w.data_vencimento < CURRENT_DATE
             )
         )
-        AND ca.tipo = @origem
+        AND LOWER(ca.tipo) = LOWER(@origem)
     ORDER BY w.data_vencimento DESC
     LIMIT 100;
         ";
 
         await using var cmd = new NpgsqlCommand(query, conn);
 
-        cmd.Parameters.AddWithValue("@empresa_id", empresaId);
-        cmd.Parameters.AddWithValue("@origem", origem);
+        cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+        .Value = empresaId;
+
+
+        cmd.Parameters.Add("@origem", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = origem;
+
+
         cmd.Parameters.Add("@search", NpgsqlTypes.NpgsqlDbType.Text)
         .Value = (object?)search ?? DBNull.Value;
+
 
         cmd.Parameters.Add("@status", NpgsqlTypes.NpgsqlDbType.Text)
         .Value = (object?)status ?? DBNull.Value;
@@ -329,6 +336,147 @@ public async Task<IActionResult> FetchWalletConta( [FromQuery] string? search,[F
                 cliente = reader.IsDBNull(reader.GetOrdinal("cliente"))
                     ? null
                     : reader.GetString(reader.GetOrdinal("cliente")),
+
+                categoria = reader.IsDBNull(reader.GetOrdinal("categoria"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("categoria")),
+
+                status = reader.IsDBNull(reader.GetOrdinal("status"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("status")),
+
+                valor = reader.GetDecimal(
+                    reader.GetOrdinal("valor")),
+
+                tipo_pagamento = reader.IsDBNull(reader.GetOrdinal("tipo_pagamento"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("tipo_pagamento")),
+
+                observacao = reader.IsDBNull(reader.GetOrdinal("observacao"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("observacao")),
+
+                origem_tipo = reader.IsDBNull(reader.GetOrdinal("origem_tipo"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("origem_tipo"))
+            });
+        }
+
+        response.Success = true;
+        response.Data = contas;
+        response.Message = contas.Count == 0
+            ? "Nenhuma conta encontrada."
+            : "Contas encontradas com sucesso.";
+
+        return Ok(response);
+    }
+    catch (Exception ex)
+    {
+        response.Success = false;
+        response.Message = $"Erro ao buscar contas: {ex.Message}";
+        return StatusCode(500, response);
+    }
+}
+[Authorize]
+[HttpGet("Get/Wallet/Conta-Pagar")]
+public async Task<IActionResult> FetchWalletContaPagar( [FromQuery] string? search,[FromQuery] string? status, [FromQuery] string origem)
+{
+    await using var conn = NovaConexao();
+    await conn.OpenAsync();
+
+    var response = new Response<List<WalletEntity>>();
+    var contas = new List<WalletEntity>();
+    var empresaId = User.GetEmpresaId();
+
+    try
+    {
+        var query = @"
+        SELECT
+        w.id,
+        w.data_cadastro,
+        w.data_vencimento,
+        w.descricao,
+        w.fornecedor_id,
+        w.categoria_id,
+        f.nome  AS fornecedor,
+        ca.nome AS categoria,
+        w.status,
+        w.valor_total AS valor,
+        w.tipo_pagamento,
+        w.observacao,
+        w.origem_tipo
+    FROM wallet w
+    INNER JOIN fornecedores f ON f.id = w.fornecedor_id
+    INNER JOIN categoria_wallet ca ON ca.id = w.categoria_id
+    WHERE
+        w.empresa_id = @empresa_id
+        AND (
+            @search IS NULL
+            OR w.descricao ILIKE '%' || @search || '%'
+            OR f.nome ILIKE '%' || @search || '%'
+            OR ca.nome ILIKE '%' || @search || '%'
+        )
+        AND (
+            @status IS NULL
+            OR (
+                @status <> 'Vencido'
+                AND w.status = @status
+            )
+            OR (
+                @status = 'Vencido'
+                AND w.status = 'Pendente'
+                AND w.data_vencimento < CURRENT_DATE
+            )
+        )
+        AND LOWER(ca.tipo) = LOWER(@origem)
+    ORDER BY w.data_vencimento DESC
+    LIMIT 100;
+        ";
+
+        await using var cmd = new NpgsqlCommand(query, conn);
+
+        cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+        .Value = empresaId;
+
+
+        cmd.Parameters.Add("@origem", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = origem;
+
+
+        cmd.Parameters.Add("@search", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = (object?)search ?? DBNull.Value;
+
+
+        cmd.Parameters.Add("@status", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = (object?)status ?? DBNull.Value;
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            contas.Add(new WalletEntity
+            {
+                id = reader.GetInt32(reader.GetOrdinal("id")),
+
+                data_cadastro = reader.GetDateTime(
+                    reader.GetOrdinal("data_cadastro")),
+
+                vencimento = reader.GetFieldValue<DateOnly>(
+                    reader.GetOrdinal("data_vencimento")),
+
+                descricao = reader.IsDBNull(reader.GetOrdinal("descricao"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("descricao")),
+
+                fornecedor_id = reader.GetInt32(
+                    reader.GetOrdinal("fornecedor_id")),
+
+                categoria_id = reader.GetInt32(
+                    reader.GetOrdinal("categoria_id")),
+
+                fornecedor = reader.IsDBNull(reader.GetOrdinal("fornecedor"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("fornecedor")),
 
                 categoria = reader.IsDBNull(reader.GetOrdinal("categoria"))
                     ? null
@@ -493,6 +641,86 @@ public async Task<IActionResult> FetchClienteECategoria(  [FromQuery] int id_cli
     {
         response.Success = false;
         response.Message = $"Erro ao buscar cliente e categoria: {ex.Message}";
+        return StatusCode(500, response);
+    }
+}
+[Authorize]
+[HttpGet("Get/Wallet/Fornecedor-Categoria")]
+public async Task<IActionResult> FetchFornecedorECategoria(  [FromQuery] int id_fornecedor,  [FromQuery] int id_categoria)
+{
+    var response = new Response<WalletFornecedorCategoriaDto>();
+    var empresaId = User.GetEmpresaId();
+
+    try
+    {
+        await using var conn = NovaConexao();
+        await conn.OpenAsync();
+
+        const string sql = @"
+        SELECT
+            f.id   AS fornecedor_id,
+            f.nome AS fornecedor_nome,
+            ca.id  AS categoria_id,
+            ca.nome AS categoria_nome
+        FROM fornecedores f
+        FULL JOIN categoria_wallet ca
+            ON ca.id = @id_categoria
+           AND ca.empresa_id = @empresa_id
+        WHERE
+            f.id = @id_fornecedor
+            AND f.empresa_id = @empresa_id;
+        ";
+
+        await using var cmd = new NpgsqlCommand(sql, conn);
+
+        cmd.Parameters.Add("@id_fornecedor", NpgsqlTypes.NpgsqlDbType.Integer)
+            .Value = id_fornecedor;
+
+        cmd.Parameters.Add("@id_categoria", NpgsqlTypes.NpgsqlDbType.Integer)
+            .Value = id_categoria;
+
+        cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+            .Value = empresaId;
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        if (!await reader.ReadAsync())
+        {
+            response.Success = false;
+            response.Message = "Fornecedor ou categoria não encontrados.";
+            return NotFound(response);
+        }
+
+        var result = new WalletFornecedorCategoriaDto();
+
+        if (!reader.IsDBNull(reader.GetOrdinal("fornecedor_id")))
+        {
+            result.fornecedor = new WalletFornecedorDto
+            {
+                id = reader.GetInt32(reader.GetOrdinal("fornecedor_id")),
+                nome = reader.GetString(reader.GetOrdinal("fornecedor_nome"))
+            };
+        }
+
+        if (!reader.IsDBNull(reader.GetOrdinal("categoria_id")))
+        {
+            result.categoria = new WalletCategoriaDto
+            {
+                id = reader.GetInt32(reader.GetOrdinal("categoria_id")),
+                nome = reader.GetString(reader.GetOrdinal("categoria_nome"))
+            };
+        }
+
+        response.Success = true;
+        response.Data = result;
+        response.Message = "Fornecedor e categoria carregados com sucesso.";
+
+        return Ok(response);
+    }
+    catch (Exception ex)
+    {
+        response.Success = false;
+        response.Message = $"Erro ao buscar Fornecedor e categoria: {ex.Message}";
         return StatusCode(500, response);
     }
 }
