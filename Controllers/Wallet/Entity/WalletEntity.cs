@@ -61,3 +61,24 @@ public class CategoriasAtivasWallet
     public int despesa_ativa {get;set;}
     public int receita_ativa {get;set;}
 }
+
+public class WalletResumoFinanceiroDto
+{
+    public decimal total_entrada { get; set; }
+    public decimal total_saida { get; set; }
+    public decimal saldo => total_entrada - total_saida;
+}
+
+public class WalletResumoFinanceiroRegistroDTO
+{
+    public int id {get;set;}
+    public DateTime? data_cadastro {get;set;}
+    public DateOnly? data_vencimento {get;set;}
+    public string ?descricao {get;set;}
+    public string ?cor {get;set;}
+    public string ?nome {get;set;}
+    public string ?origem_tipo {get;set;}
+    public string ?status {get;set;}
+    public decimal? valor_total {get;set;}
+
+}

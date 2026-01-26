@@ -19,228 +19,6 @@ public class SaleAPI : ControllerBase
     private NpgsqlConnection NovaConexao()
         => new(_config.GetConnectionString("DefaultConnection"));
 
-    // [Authorize]
-    // [HttpPost("Post/Create/Client")]
-    // public async Task<IActionResult> CreateClient([FromBody] ClientDTO dto)
-    // {
-    //     await using var conn = NovaConexao();
-    //     await conn.OpenAsync();
-
-    //     var response = new Response<string>();
-    //     await using var transaction = await conn.BeginTransactionAsync();
-    //     var empresaId = User.GetEmpresaId();
-    //     int clientId;
-
-    //     try
-    //     {
-    //         const string sqlCliente = @"
-    //         INSERT INTO cliente
-    //         (empresa_id, grupo_id, tipo, nome, documento, email, telefone, observacao, ativo)
-    //         VALUES
-    //         (@empresa_id, @grupo_id, @tipo, @nome, @documento, @email, @telefone, @observacao, @ativo)
-    //         RETURNING id;
-    //     ";
-
-    //         await using (var cmd = new NpgsqlCommand(sqlCliente, conn, transaction))
-    //         {
-    //             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
-    //             cmd.Parameters.AddWithValue("@grupo_id", (object?)dto.grupo_id ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@tipo", (object?)dto.tipo ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@nome", (object?)dto.nome ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@documento", (object?)dto.documento ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@email", (object?)dto.email ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@telefone", (object?)dto.telefone ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@observacao", (object?)dto.observacao ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@ativo", dto.ativo);
-
-    //             clientId = (int)(await cmd.ExecuteScalarAsync()
-    //                 ?? throw new Exception("Falha ao obter ID do cliente."));
-    //         }
-
-    //         const string sqlEndereco = @"
-    //         INSERT INTO endereco
-    //         (cliente_id, empresa_id, rua, numero, bairro, cidade, uf, complemento, cep, cod_uf)
-    //         VALUES
-    //         (@cliente_id, @empresa_id, @rua, @numero, @bairro, @cidade, @uf, @complemento, @cep,@cod_uf);
-    //     ";
-
-    //         if (!string.IsNullOrWhiteSpace(dto.rua))
-    //         {
-    //             await using var cmdEndereco = new NpgsqlCommand(sqlEndereco, conn, transaction);
-    //             cmdEndereco.Parameters.AddWithValue("@cliente_id", clientId);
-    //             cmdEndereco.Parameters.AddWithValue("@empresa_id", empresaId);
-    //             cmdEndereco.Parameters.AddWithValue("@rua", (object?)dto.rua ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@numero", (object?)dto.numero ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@bairro", (object?)dto.bairro ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@cidade", (object?)dto.cidade ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@uf", (object?)dto.uf ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@complemento", (object?)dto.complemento ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@cep", (object?)dto.cep ?? DBNull.Value);
-    //             cmdEndereco.Parameters.AddWithValue("@cod_uf", (object?)dto.cod_uf ?? DBNull.Value);
-
-    //             await cmdEndereco.ExecuteNonQueryAsync();
-
-
-    //         }
-
-    //         await transaction.CommitAsync();
-
-    //         response.Success = true;
-    //         response.Message = "Cliente cadastrado com sucesso.";
-    //         return Ok(response);
-    //     }
-    //     catch (PostgresException ex) when (ex.SqlState == "23505")
-    //     {
-    //         await transaction.RollbackAsync();
-    //         response.Success = false;
-    //         response.Message = "Já existe um cliente cadastrado com este documento ou e-mail.";
-    //         return BadRequest(response);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         await transaction.RollbackAsync();
-    //         response.Success = false;
-    //         response.Message = $"Erro ao cadastrar cliente: {ex.Message}";
-    //         return StatusCode(500, response);
-    //     }
-    // }
-
-    // [Authorize]
-    // [HttpPut("Put/Update/Client")]
-    // public async Task<IActionResult> UpdateClient([FromBody] ClientDetailsEntity dto)
-    // {
-    //     await using var conn = NovaConexao(); // NpgsqlConnection
-    //     await conn.OpenAsync();
-
-    //     var response = new Response<string>();
-    //     await using var transaction = await conn.BeginTransactionAsync();
-
-    //     var empresaId = User.GetEmpresaId();
-    //     try
-    //     {
-    //         const string sql = @"
-    //         UPDATE cliente SET
-    //             grupo_id = @grupo_id,
-    //             tipo = @tipo,
-    //             nome = @nome,
-    //             documento = @documento,
-    //             email = @email,
-    //             telefone = @telefone,
-    //             observacao = @observacao,
-    //             ativo = @ativo
-    //         WHERE id = @id and empresa_id=@empresa_id;
-    //     ";
-    //         const string sqlDelete = @"delete from endereco where cliente_id = @cliente_id";
-
-    //         const string sqlEndereco = @"
-    //         INSERT INTO endereco
-    //         (cliente_id, empresa_id, rua, numero, bairro, cidade, uf, complemento, cep, cod_uf)
-    //         VALUES
-    //         (@cliente_id, @empresa_id, @rua, @numero, @bairro, @cidade, @uf, @complemento, @cep,@cod_uf);
-    //     ";
-
-    //         await using (var cmd = new NpgsqlCommand(sql, conn, transaction))
-    //         {
-    //             cmd.Parameters.AddWithValue("@id", dto.id);
-    //             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
-    //             cmd.Parameters.AddWithValue("@grupo_id", (object?)dto.grupo_id ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@tipo", (object?)dto.tipo ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@nome", (object?)dto.nome ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@documento", (object?)dto.documento ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@email", (object?)dto.email ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@telefone", (object?)dto.telefone ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@observacao", (object?)dto.observacao ?? DBNull.Value);
-    //             cmd.Parameters.AddWithValue("@ativo", dto.ativo);
-    //             var rowsAffected = await cmd.ExecuteNonQueryAsync();
-
-    //             if (rowsAffected == 0)
-    //             {
-    //                 await transaction.RollbackAsync();
-    //                 response.Success = false;
-    //                 response.Message = "Cliente não encontrado ou não pertence à empresa.";
-    //                 return NotFound(response);
-    //             }
-    //         }
-
-    //         await using var cmdDeleteEndereco = new NpgsqlCommand(sqlDelete, conn, transaction);
-    //         cmdDeleteEndereco.Parameters.AddWithValue("@cliente_id", dto.id);
-    //         await cmdDeleteEndereco.ExecuteNonQueryAsync();
-
-    //         await using var cmdEndereco = new NpgsqlCommand(sqlEndereco, conn, transaction);
-    //         cmdEndereco.Parameters.AddWithValue("@cliente_id", dto.id);
-    //         cmdEndereco.Parameters.AddWithValue("@empresa_id", empresaId);
-    //         cmdEndereco.Parameters.AddWithValue("@rua", (object?)dto.rua ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@numero", (object?)dto.numero ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@bairro", (object?)dto.bairro ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@cidade", (object?)dto.cidade ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@uf", (object?)dto.uf ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@complemento", (object?)dto.complemento ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@cep", (object?)dto.cep ?? DBNull.Value);
-    //         cmdEndereco.Parameters.AddWithValue("@cod_uf", (object?)dto.cod_uf ?? DBNull.Value);
-    //         await cmdEndereco.ExecuteNonQueryAsync();
-    //         await transaction.CommitAsync();
-    //         response.Success = true;
-    //         response.Message = "Cliente atualizado com sucesso.";
-    //         return Ok(response);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         await transaction.RollbackAsync();
-    //         response.Success = false;
-    //         response.Message = $"Erro ao atualizar Cliente: {ex.Message}";
-    //         return StatusCode(500, response);
-    //     }
-
-    // }
-    // [Authorize]
-    // [HttpPut("Put/Status/Client")]
-    // public async Task<IActionResult> StatusUpdateClient([FromBody] ClientStatusDTO dto)
-    // {
-    //     await using var conn = NovaConexao(); // NpgsqlConnection
-    //     await conn.OpenAsync();
-
-    //     var response = new Response<string>();
-    //     await using var transaction = await conn.BeginTransactionAsync();
-
-    //     var empresaId = User.GetEmpresaId();
-    //     try
-    //     {
-    //         const string sql = @"
-    //         UPDATE cliente SET
-    //             ativo = @ativo
-    //         WHERE id = @id and empresa_id=@empresa_id;
-    //     ";
-    //         await using (var cmd = new NpgsqlCommand(sql, conn, transaction))
-    //         {
-    //             cmd.Parameters.AddWithValue("@id", dto.id);
-    //             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
-    //             cmd.Parameters.AddWithValue("@ativo", dto.status);
-    //             var rowsAffected = await cmd.ExecuteNonQueryAsync();
-
-    //             if (rowsAffected == 0)
-    //             {
-    //                 await transaction.RollbackAsync();
-    //                 response.Success = false;
-    //                 response.Message = "Cliente não encontrado ou não pertence à empresa.";
-    //                 return NotFound(response);
-    //             }
-    //         }
-    //         await transaction.CommitAsync();
-
-    //         response.Success = true;
-    //         response.Message = "Cliente atualizado com sucesso.";
-    //         return Ok(response);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         await transaction.RollbackAsync();
-    //         response.Success = false;
-    //         response.Message = $"Erro ao atualizar Cliente: {ex.Message}";
-    //         return StatusCode(500, response);
-    //     }
-
-    // }
-
 
     [Authorize]
     [HttpGet("Get/Sales/Product")]
@@ -386,6 +164,7 @@ public class SaleAPI : ControllerBase
             return StatusCode(500, response);
         }
     }
+    
     [Authorize]
     [HttpGet("Get/Sales/Client")]
     public async Task<IActionResult> FetchClient([FromQuery] string search)
@@ -452,6 +231,7 @@ public class SaleAPI : ControllerBase
             return StatusCode(500, response);
         }
     }
+    
     [Authorize]
     [HttpGet("Get/Sales/Fornecedores")]
     public async Task<IActionResult> FetchFornecedor([FromQuery] string search)
@@ -722,6 +502,84 @@ public class SaleAPI : ControllerBase
                     await cmdSaldo.ExecuteNonQueryAsync();
                 }
             }
+            const string fetchCategoriaVenda = @"
+            select id from categoria_wallet where nome = 'Vendas' and empresa_id =@empresa_id;
+            ";
+            int categoriaId = 0;
+            using (var cmd = new NpgsqlCommand(fetchCategoriaVenda, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync())
+                    {
+                         categoriaId = reader.GetInt32("id");
+                    }
+                   
+                }
+            }
+
+            const string insertIntoWallet = @"
+            INSERT INTO wallet
+            (
+            empresa_id,
+            categoria_id,
+            cliente_id,
+            valor_total,
+            status,
+            origem_tipo,
+            origem_id,
+            observacao,
+            tipo_pagamento,
+            descricao,
+            data_vencimento
+            )
+            VALUES
+            (
+            @empresa_id,
+            @categoria_id,
+            @cliente_id,
+            @valor_total,
+            @status,
+            'Conta a Receber',
+            @origem_id,
+            @observacao,
+            @tipo_pagamento,
+            @descricao,
+            CURRENT_DATE
+            );
+            ";
+            await using (var cmd = new NpgsqlCommand(insertIntoWallet, conn, transaction))
+            {
+                cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = empresaId;
+
+                cmd.Parameters.Add("@categoria_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = categoriaId;
+
+                cmd.Parameters.Add("@cliente_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = dto.client_id;
+
+                cmd.Parameters.Add("@origem_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = vendaId;
+
+                cmd.Parameters.Add("@valor_total", NpgsqlTypes.NpgsqlDbType.Numeric)
+                    .Value = dto.total;
+
+                cmd.Parameters.Add("@status", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = dto.status == "Aprovado" ? "Recebido" : "Pendente";
+
+                cmd.Parameters.Add("@tipo_pagamento", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = "Dinheiro";
+
+                cmd.Parameters.Add("@descricao", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = $"Pedido n- {vendaId}";
+
+                cmd.Parameters.Add("@observacao", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = (object?)dto.observacao ?? DBNull.Value;
+
+                await cmd.ExecuteNonQueryAsync();
+            }
 
             await transaction.CommitAsync();
 
@@ -816,6 +674,20 @@ public class SaleAPI : ControllerBase
                 if (rows == 0)
                     throw new Exception("Venda não encontrada ou já Cancelada.");
             }
+
+            const string deleteWallet = @"
+            delete from wallet where origem_id =@id and empresa_id = @empresa_id;
+            ";
+            await using (var cmdCancel = new NpgsqlCommand(deleteWallet, conn, transaction))
+            {
+                cmdCancel.Parameters.AddWithValue("@id", vendaId);
+                cmdCancel.Parameters.AddWithValue("@empresa_id", empresaId);
+
+                var rows = await cmdCancel.ExecuteNonQueryAsync();
+                if (rows == 0)
+                    throw new Exception("Venda não encontrada ou já Cancelada.");
+            }
+
 
             await transaction.CommitAsync();
 
@@ -999,6 +871,19 @@ public class SaleAPI : ControllerBase
                 cmdVenda.Parameters.AddWithValue("@empresa_id", empresaId);
 
                 await cmdVenda.ExecuteNonQueryAsync();
+            }
+
+            if (dto.status == "Aprovado")
+            {
+                const string updateWallet = @"
+                update wallet set status = 'Recebido', data_atualizacao= current_date where origem_id = @id;
+                ";
+            await using (var cmd = new NpgsqlCommand(updateWallet, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@id", vendaId);
+
+                await cmd.ExecuteNonQueryAsync();
+            }
             }
 
             await transaction.CommitAsync();

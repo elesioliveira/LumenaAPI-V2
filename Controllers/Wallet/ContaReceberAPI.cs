@@ -288,7 +288,7 @@ public async Task<IActionResult> FetchWalletConta( [FromQuery] string? search,[F
             )
         )
         AND LOWER(ca.tipo) = LOWER(@origem)
-    ORDER BY w.data_vencimento DESC
+    order by w.data_cadastro DESC
     LIMIT 100;
         ";
 
@@ -780,6 +780,191 @@ public async Task<IActionResult> FetchDashBoardWallet(  [FromQuery] string orige
     {
         response.Success = false;
         response.Message = $"Erro ao buscar Dashboard: {ex.Message}";
+        return StatusCode(500, response);
+    }
+}
+
+[Authorize]
+[HttpGet("Get/Wallet/Resumo-Financeiro")]
+public async Task<IActionResult> FetchResumoFinanceiro( [FromQuery] DateOnly data_inicio,  [FromQuery] DateOnly data_fim)
+{
+    var response = new Response<WalletResumoFinanceiroDto>();
+    var empresaId = User.GetEmpresaId();
+
+    try
+    {
+        await using var conn = NovaConexao();
+        await conn.OpenAsync();
+
+        const string query = @"
+            SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN c.tipo = 'Receita'
+                        AND w.status = 'Recebido'
+                        AND w.data_cadastro >= @data_inicio
+                        AND w.data_cadastro < (@data_fim + INTERVAL '1 day')
+                        THEN w.valor_total
+                        ELSE 0
+                    END
+                ), 0
+            ) AS total_entrada,
+
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN c.tipo = 'Despesa'
+                        AND w.status = 'Pago'
+                        AND w.data_cadastro >= @data_inicio
+                        AND w.data_cadastro < (@data_fim + INTERVAL '1 day')
+                        THEN w.valor_total
+                        ELSE 0
+                    END
+                ), 0
+            ) AS total_saida
+        FROM wallet w
+        INNER JOIN categoria_wallet c
+            ON c.id = w.categoria_id
+        AND c.empresa_id = w.empresa_id
+        WHERE w.empresa_id = @empresa_id;
+        ";
+
+        await using var cmd = new NpgsqlCommand(query, conn);
+
+        cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+           .Value = empresaId;
+
+        cmd.Parameters.Add("@data_inicio", NpgsqlTypes.NpgsqlDbType.Date)
+           .Value = data_inicio;
+
+        cmd.Parameters.Add("@data_fim", NpgsqlTypes.NpgsqlDbType.Date)
+           .Value = data_fim;
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        if (await reader.ReadAsync())
+        {
+            response.Success = true;
+            response.Data = new WalletResumoFinanceiroDto
+            {
+                total_entrada = reader.GetDecimal(reader.GetOrdinal("total_entrada")),
+                total_saida = reader.GetDecimal(reader.GetOrdinal("total_saida"))
+            };
+            response.Message = "Resumo financeiro carregado com sucesso.";
+        }
+        else
+        {
+            response.Success = true;
+            response.Data = new WalletResumoFinanceiroDto();
+            response.Message = "Nenhum dado encontrado para o período.";
+        }
+
+        return Ok(response);
+    }
+    catch (Exception ex)
+    {
+        response.Success = false;
+        response.Message = $"Erro ao buscar resumo financeiro: {ex.Message}";
+        return StatusCode(500, response);
+    }
+}
+
+[Authorize]
+[HttpGet("Get/Wallet/Resumo-Financeiro-Registros")]
+public async Task<IActionResult> FetchResumoFinanceiroRegistros( [FromQuery] DateOnly data_inicio,  [FromQuery] DateOnly data_fim,[FromQuery] string? receita, [FromQuery] string? status, [FromQuery] string? search)
+{
+    var response = new Response<List<WalletResumoFinanceiroRegistroDTO>>();
+    response.Data = new();
+    var empresaId = User.GetEmpresaId();
+
+    try
+    {
+        await using var conn = NovaConexao();
+        await conn.OpenAsync();
+
+        const string query = @"
+          select 
+           w.id, w.data_cadastro, w.descricao, c.nome, c.cor, w.origem_tipo, w.status, w.valor_total, w.data_vencimento
+            from wallet w
+            inner join categoria_wallet c on c.id = w.categoria_id
+            where w.empresa_id = @empresa_id
+            And w.data_cadastro >= @data_inicio
+            And w.data_cadastro < (@data_fim + INTERVAL '1 day')
+            And (
+            @search is null
+            OR w.descricao ILIKE '%' || @search || '%'
+            )
+            AND (
+                @status IS NULL
+                OR (
+                    @status <> 'Vencido'
+                    AND w.status = @status
+                )
+                OR (
+                    @status = 'Vencido'
+                    AND w.status = 'Pendente'
+                    AND w.data_vencimento < CURRENT_DATE
+                )
+            )
+            And (
+            @receita is null
+            OR c.tipo ILIKE '%' || @receita || '%'
+            )
+            order by w.data_cadastro asc
+        ";
+
+        await using var cmd = new NpgsqlCommand(query, conn);
+
+        cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+           .Value = empresaId;
+
+        cmd.Parameters.Add("@data_inicio", NpgsqlTypes.NpgsqlDbType.Date)
+           .Value = data_inicio;
+
+        cmd.Parameters.Add("@data_fim", NpgsqlTypes.NpgsqlDbType.Date)
+           .Value = data_fim;
+
+        cmd.Parameters.Add("@receita", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value =(object?)receita ?? DBNull.Value;
+
+
+        cmd.Parameters.Add("@search", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = (object?)search ?? DBNull.Value;
+
+
+        cmd.Parameters.Add("@status", NpgsqlTypes.NpgsqlDbType.Text)
+        .Value = (object?)status ?? DBNull.Value;
+
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                response.Data.Add(new WalletResumoFinanceiroRegistroDTO
+                {
+                id = reader.GetInt32(reader.GetOrdinal("id")),
+                data_cadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
+                data_vencimento = reader.GetFieldValue<DateOnly>(reader.GetOrdinal("data_vencimento")),
+                descricao = reader.GetString(reader.GetOrdinal("descricao")),
+                cor = reader.GetString(reader.GetOrdinal("cor")),
+                nome = reader.GetString(reader.GetOrdinal("nome")),
+                origem_tipo = reader.GetString(reader.GetOrdinal("origem_tipo")),
+                status = reader.GetString(reader.GetOrdinal("status")),
+                valor_total = reader.GetDecimal(reader.GetOrdinal("valor_total"))
+                });
+            }
+
+        response.Success = true;
+        response.Message = response.Data.Count == 0
+        ? "Nenhum dado encontrado para o período."
+        : "Resumo financeiro carregado com sucesso.";
+        return Ok(response);
+    }
+    catch (Exception ex)
+    {
+        response.Success = false;
+        response.Message = $"Erro ao buscar resumo financeiro: {ex.Message}";
         return StatusCode(500, response);
     }
 }

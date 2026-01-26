@@ -70,6 +70,30 @@ public class EmpresaController : ControllerBase
                 await cmd.ExecuteNonQueryAsync();
             }
 
+            const string insertCategoriaVenda = @"
+            --inserir categoria de venda pra empresa nova
+            insert into categoria_wallet (empresa_id,nome, tipo, descricao, cor) values
+            (@empresa_id, 'Vendas', 'Receita', 'Vendas feitas pelo PDV' , '#00FF9C');
+            ";
+
+            await using (var cmd = new NpgsqlCommand(insertCategoriaVenda, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            const string insertCategoriaEntrada = @"
+            --inserir categoria de entrada pra empresa nova
+            insert into categoria_wallet (empresa_id,nome, tipo, descricao, cor) values
+            (@empresa_id, 'Fornecedores', 'Despesa', 'Entrada de nota pelo sistema' , '#FF2E2E');
+            ";
+            await using (var cmd = new NpgsqlCommand(insertCategoriaEntrada, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+
             // Se chegou até aqui, comita
             await transaction.CommitAsync();
             response.Success = true;

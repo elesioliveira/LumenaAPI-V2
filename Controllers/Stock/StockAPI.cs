@@ -133,7 +133,83 @@ public class StockAPI : ControllerBase
                     await cmdSaldo.ExecuteNonQueryAsync();
                 }
             }
+            const string fetchCategoriaVenda = @"
+            select id from categoria_wallet where nome = 'Fornecedores' and empresa_id =@empresa_id;
+            ";
+             int categoriaId = 0;
+            using (var cmd = new NpgsqlCommand(fetchCategoriaVenda, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync())
+                    {
+                         categoriaId = reader.GetInt32("id");
+                    }
+                   
+                }
+            }
+ const string insertIntoWallet = @"
+            INSERT INTO wallet
+            (
+            empresa_id,
+            categoria_id,
+            fornecedor_id,
+            valor_total,
+            status,
+            origem_tipo,
+            origem_id,
+            observacao,
+            tipo_pagamento,
+            descricao,
+            data_vencimento
+            )
+            VALUES
+            (
+            @empresa_id,
+            @categoria_id,
+            @fornecedor_id,
+            @valor_total,
+            @status,
+            'Conta a Pagar',
+            @origem_id,
+            @observacao,
+            @tipo_pagamento,
+            @descricao,
+            CURRENT_DATE
+            );
+            "; 
+            await using (var cmd = new NpgsqlCommand(insertIntoWallet, conn, transaction))
+            {
+                cmd.Parameters.Add("@empresa_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = empresaId;
 
+                cmd.Parameters.Add("@categoria_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = categoriaId;
+
+                cmd.Parameters.Add("@fornecedor_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = dto.fornecedor_id;
+
+                cmd.Parameters.Add("@origem_id", NpgsqlTypes.NpgsqlDbType.Integer)
+                    .Value = movimentacaoId;
+
+                cmd.Parameters.Add("@valor_total", NpgsqlTypes.NpgsqlDbType.Numeric)
+                    .Value = dto.valor_total;
+
+                cmd.Parameters.Add("@status", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = "Pendente";
+
+                cmd.Parameters.Add("@tipo_pagamento", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = "Dinheiro";
+
+                cmd.Parameters.Add("@descricao", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = $"Movimentação estoque n- {dto.nota}";
+
+                cmd.Parameters.Add("@observacao", NpgsqlTypes.NpgsqlDbType.Text)
+                    .Value = (object?)dto.observacao ?? DBNull.Value;
+
+                await cmd.ExecuteNonQueryAsync();
+            }
             await transaction.CommitAsync();
 
             response.Success = true;
@@ -637,6 +713,17 @@ public class StockAPI : ControllerBase
                 await cmd.ExecuteNonQueryAsync();
             }
 
+            const string deleteWallet = @"
+            delete from wallet where origem_id =@id and empresa_id = @empresa_id;
+            ";
+            await using (var cmdCancel = new NpgsqlCommand(deleteWallet, conn, transaction))
+            {
+                cmdCancel.Parameters.AddWithValue("@id", movimentacaoId);
+                cmdCancel.Parameters.AddWithValue("@empresa_id", empresaId);
+
+                await cmdCancel.ExecuteNonQueryAsync();
+         
+            }
             await transaction.CommitAsync();
 
             response.Success = true;
