@@ -92,3 +92,4 @@ C:\LumenaAPI-V2\obj\Debug\net10.0\refint\LumenaAPI.dll
 C:\LumenaAPI-V2\obj\Debug\net10.0\LumenaAPI.pdb
 C:\LumenaAPI-V2\obj\Debug\net10.0\LumenaAPI.genruntimeconfig.cache
 C:\LumenaAPI-V2\obj\Debug\net10.0\ref\LumenaAPI.dll
+C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.staticwebassets.runtime.json

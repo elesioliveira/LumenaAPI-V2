@@ -101,11 +101,10 @@ if (!app.Environment.IsDevelopment())
 
 //  CORS sempre antes de Auth
 app.UseCors("DevPolicy");
-
+app.UseStaticFiles();
 // 🔐 Auth
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
