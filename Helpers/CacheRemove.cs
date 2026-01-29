@@ -9,13 +9,36 @@ public class CacheHelper
         _cache = cache;
     }
 
-    public void Remove(int key)
+    public void Set<T>(
+        string key,
+        T value,
+        TimeSpan? expiration = null
+    )
+    {
+        var options = new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = expiration ?? TimeSpan.FromMinutes(10)
+        };
+
+        _cache.Set(key, value, options);
+    }
+
+    public bool TryGet<T>(string key, out T? value)
+    {
+        return _cache.TryGetValue(key, out value);
+    }
+
+    public void Remove(string key)
     {
         _cache.Remove(key);
     }
+}
 
-    public void RemoveByEmpresa(int empresaId)
-    {
-        _cache.Remove($"form-product:{empresaId}");
-    }
+public static class CacheKeys
+{
+    public static string FormProduct(int empresaId)
+        => $"form-product:{empresaId}";
+
+    public static string FormUsers(int empresaId)
+        => $"form-users:{empresaId}";
 }

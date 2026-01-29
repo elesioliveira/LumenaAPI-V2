@@ -45,6 +45,7 @@ C:\LumenaAPIV2\LumenaAPI\obj\Debug\net10.0\LumenaAPI.genruntimeconfig.cache
 C:\LumenaAPIV2\LumenaAPI\obj\Debug\net10.0\ref\LumenaAPI.dll
 C:\LumenaAPI-V2\bin\Debug\net10.0\appsettings.Development.json
 C:\LumenaAPI-V2\bin\Debug\net10.0\appsettings.json
+C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.staticwebassets.runtime.json
 C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.staticwebassets.endpoints.json
 C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.exe
 C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.deps.json
@@ -92,4 +93,3 @@ C:\LumenaAPI-V2\obj\Debug\net10.0\refint\LumenaAPI.dll
 C:\LumenaAPI-V2\obj\Debug\net10.0\LumenaAPI.pdb
 C:\LumenaAPI-V2\obj\Debug\net10.0\LumenaAPI.genruntimeconfig.cache
 C:\LumenaAPI-V2\obj\Debug\net10.0\ref\LumenaAPI.dll
-C:\LumenaAPI-V2\bin\Debug\net10.0\LumenaAPI.staticwebassets.runtime.json

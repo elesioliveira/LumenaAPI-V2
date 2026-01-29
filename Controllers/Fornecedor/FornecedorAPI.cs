@@ -33,7 +33,6 @@ public class FornecedorController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             const string queryInsertFornecedor = @"
             INSERT INTO fornecedores
             (
@@ -116,7 +115,6 @@ public class FornecedorController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             var fields = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(fornecedor.nome))

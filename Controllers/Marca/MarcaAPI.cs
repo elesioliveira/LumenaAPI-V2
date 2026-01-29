@@ -32,7 +32,6 @@ public class MarcaController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             const string queryInsertFornecedor = @"insert into marca (empresa_id,nome, website) values (@empresa_id,@nome, @website)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
@@ -90,7 +89,6 @@ public class MarcaController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             var fields = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(dto.nome))

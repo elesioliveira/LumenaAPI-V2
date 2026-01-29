@@ -11,112 +11,142 @@ public class AuthController : ControllerBase
     private readonly JwtService _jwt;
     private readonly IRefreshTokenRepository _refreshRepo;
     private readonly IConfiguration _config;
+    private readonly CacheHelper _cacheHelper;
 
-    public AuthController(IConfiguration config, JwtService jwt, IRefreshTokenRepository refreshRepo)
+    public AuthController(IConfiguration config, JwtService jwt, IRefreshTokenRepository refreshRepo,CacheHelper cacheHelper)
     {
         _config = config;
         _conn = config.GetConnectionString("DefaultConnection")!;
         _jwt = jwt;
         _refreshRepo = refreshRepo;
+        _cacheHelper = cacheHelper;
     }
 
-    [HttpPost("Login")]
-    public async Task<IActionResult> Login([FromBody] LoginDTO dto)
+  [HttpPost("Login")]
+public async Task<IActionResult> Login([FromBody] LoginDTO dto)
+{
+    await using var conn = new NpgsqlConnection(_conn);
+    await conn.OpenAsync();
+
+    var response = new Response<UsuarioEntity>();
+
+    var sql = @"
+        SELECT id, empresa_id, data_cadastro, nome, email, senha_hash, salt, ativo
+        FROM usuario
+        WHERE email = @email
+        LIMIT 1;
+    ";
+
+    UsuarioEntity usuario;
+    byte[] senhaHash;
+    byte[] salt;
+
+    await using (var cmd = new NpgsqlCommand(sql, conn))
     {
-        // validar entrada básica omitted...
-        await using var conn = new NpgsqlConnection(_conn);
-        await conn.OpenAsync();
-        var response = new Response<UsuarioEntity>();
+        cmd.Parameters.AddWithValue("@email", dto.Email.Trim());
 
-        var sql = @"
-            SELECT id, empresa_id, data_cadastro, nome, email, senha_hash, salt, ativo
-            FROM usuario
-            WHERE email = @email
-            LIMIT 1;
-        ";
+        await using var reader = await cmd.ExecuteReaderAsync();
 
-        UsuarioEntity usuario;
-        byte[] senhaHash;
-        byte[] salt;
-
-        await using (var cmd = new NpgsqlCommand(sql, conn))
-        {
-            cmd.Parameters.AddWithValue("email", dto.Email.Trim());
-            await using var reader = await cmd.ExecuteReaderAsync();
-
-            if (!await reader.ReadAsync())
-            {
-                response.Success = false;
-                response.Message = "Usuário ou senha incorretos.";
-                return Unauthorized(response);
-            }
-
-
-            usuario = new UsuarioEntity
-            {
-                id = reader.GetInt32(reader.GetOrdinal("id")),
-                empresaid = reader.GetInt32(reader.GetOrdinal("empresa_id")),
-                datacadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
-                nome = reader.GetString(reader.GetOrdinal("nome")),
-                email = reader.GetString(reader.GetOrdinal("email")),
-                ativo = reader.GetBoolean(reader.GetOrdinal("ativo"))
-            };
-
-            senhaHash = (byte[])reader["senha_hash"];
-            salt = (byte[])reader["salt"];
-        }
-
-        if (!usuario.ativo)
-        {
-            response.Success = false;
-            response.Message = "Usuário inexistente/desativado.";
-            return Unauthorized(response);
-        }
-
-
-        if (!PasswordHasher.VerifyPassword(dto.Senha, senhaHash, salt))
+        if (!await reader.ReadAsync())
         {
             response.Success = false;
             response.Message = "Usuário ou senha incorretos.";
             return Unauthorized(response);
         }
 
+        usuario = new UsuarioEntity
+        {
+            id = reader.GetInt32(reader.GetOrdinal("id")),
+            empresaid = reader.GetInt32(reader.GetOrdinal("empresa_id")),
+            datacadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
+            nome = reader.GetString(reader.GetOrdinal("nome")),
+            email = reader.GetString(reader.GetOrdinal("email")),
+            ativo = reader.GetBoolean(reader.GetOrdinal("ativo"))
+        };
 
-        // Gerar access token
-        var jwtToken = _jwt.GenerateToken(usuario.id, usuario.empresaid);
+        senhaHash = (byte[])reader["senha_hash"];
+        salt = (byte[])reader["salt"];
+    }
 
-        // Gerar refresh token (texto)
-        var refreshTokenPlain = RefreshTokenHelper.GenerateRefreshToken();
-        var refreshHash = RefreshTokenHelper.HashToken(refreshTokenPlain);
-        var refreshExpires = DateTime.UtcNow.AddDays(int.Parse(_config["Jwt:RefreshTokenDays"] ?? "7"));
+    if (!usuario.ativo)
+    {
+        response.Success = false;
+        response.Message = "Usuário inexistente/desativado.";
+        return Unauthorized(response);
+    }
 
-        // Salvar hash no banco
-        await _refreshRepo.SaveAsync(usuario.id, refreshHash, refreshExpires);
+    if (!PasswordHasher.VerifyPassword(dto.Senha, senhaHash, salt))
+    {
+        response.Success = false;
+        response.Message = "Usuário ou senha incorretos.";
+        return Unauthorized(response);
+    }
 
-        // Set cookies
-        var accessCookieOptions = new CookieOptions
+    // 🔐 Geração de tokens
+    var jwtToken = _jwt.GenerateToken(usuario.id, usuario.empresaid);
+
+    var refreshTokenPlain = RefreshTokenHelper.GenerateRefreshToken();
+    var refreshHash = RefreshTokenHelper.HashToken(refreshTokenPlain);
+    var refreshExpires = DateTime.UtcNow.AddDays(
+        int.Parse(_config["Jwt:RefreshTokenDays"] ?? "7")
+    );
+
+    await _refreshRepo.SaveAsync(usuario.id, refreshHash, refreshExpires);
+
+    // 🍪 Cookies
+    Response.Cookies.Append(
+        "access_token",
+        jwtToken,
+        new CookieOptions
         {
             HttpOnly = true,
-            Secure = true, // production: true (requires HTTPS)
+            Secure = true,
             SameSite = SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddMinutes(int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15"))
-        };
-        var refreshCookieOptions = new CookieOptions
+            Expires = DateTime.UtcNow.AddMinutes(
+                int.Parse(_config["Jwt:AccessTokenMinutes"] ?? "15")
+            )
+        }
+    );
+
+    Response.Cookies.Append(
+        "refresh_token",
+        refreshTokenPlain,
+        new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
             Expires = refreshExpires
-        };
+        }
+    );
 
-        Response.Cookies.Append("access_token", jwtToken, accessCookieOptions);
-        Response.Cookies.Append("refresh_token", refreshTokenPlain, refreshCookieOptions); // plain cookie; server stores only hash
-        response.Success = true;
-        response.Message = "Login realizado com sucesso.";
-        response.Data = usuario;
-        return Ok(response);
+    // 🕒 UPDATE ultimo_acesso
+    const string updateUltimoAcessoSql =
+        @"UPDATE usuario SET ultimo_acesso = NOW() WHERE id = @id;";
+
+    await using (var updateCmd = new NpgsqlCommand(updateUltimoAcessoSql, conn))
+    {
+        updateCmd.Parameters.AddWithValue("@id", usuario.id);
+        await updateCmd.ExecuteNonQueryAsync();
     }
 
+    // 🧹 INVALIDA CACHE (não pode quebrar o login)
+    try
+    {
+        _cacheHelper.Remove(CacheKeys.FormUsers(usuario.empresaid));
+    }
+    catch
+    {
+        // cache nunca deve derrubar login
+        // log opcional
+    }
+
+    response.Success = true;
+    response.Message = "Login realizado com sucesso.";
+    response.Data = usuario;
+
+    return Ok(response);
+}
     [HttpPost("Refresh")]
     public async Task<IActionResult> Refresh()
     {

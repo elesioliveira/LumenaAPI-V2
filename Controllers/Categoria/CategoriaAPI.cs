@@ -33,7 +33,6 @@ public class CategoriaController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             const string queryInsertFornecedor = @"insert into categoria (empresa_id,nome, descricao) values (@empresa_id,@nome, @descricao)";
 
             await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
@@ -91,7 +90,6 @@ public class CategoriaController : ControllerBase
 
         try
         {
-            _cacheHelper.RemoveByEmpresa(User.GetEmpresaId());
             var fields = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(dto.nome))
