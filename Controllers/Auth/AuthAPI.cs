@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 [ApiController]
 [Route("API/V1/[controller]")]
@@ -31,11 +32,27 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
     var response = new Response<UsuarioEntity>();
 
     var sql = @"
-        SELECT id, empresa_id, data_cadastro, nome, email, senha_hash, salt, ativo
-        FROM usuario
-        WHERE email = @email
-        LIMIT 1;
-    ";
+    SELECT
+        u.id,
+        u.empresa_id,
+        u.data_cadastro,
+        u.nome,
+        u.email,
+        u.senha_hash,
+        u.salt,
+        u.ativo,
+        COALESCE(
+            (
+                SELECT json_agg(r.rota)
+                FROM rota_usuario r
+                WHERE r.id_usuario = u.id
+            ),
+            '[]'::json
+        ) AS rotas
+    FROM usuario u
+    WHERE u.email = @email
+    LIMIT 1;
+        ";
 
     UsuarioEntity usuario;
     byte[] senhaHash;
@@ -53,7 +70,7 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
             response.Message = "Usuário ou senha incorretos.";
             return Unauthorized(response);
         }
-
+        var rotasJson = reader.GetString(reader.GetOrdinal("rotas"));
         usuario = new UsuarioEntity
         {
             id = reader.GetInt32(reader.GetOrdinal("id")),
@@ -61,7 +78,8 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
             datacadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
             nome = reader.GetString(reader.GetOrdinal("nome")),
             email = reader.GetString(reader.GetOrdinal("email")),
-            ativo = reader.GetBoolean(reader.GetOrdinal("ativo"))
+            ativo = reader.GetBoolean(reader.GetOrdinal("ativo")),
+            rotas = JsonSerializer.Deserialize<List<int>>(rotasJson) ?? new()
         };
 
         senhaHash = (byte[])reader["senha_hash"];
@@ -147,6 +165,8 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
 
     return Ok(response);
 }
+    
+    
     [HttpPost("Refresh")]
     public async Task<IActionResult> Refresh()
     {

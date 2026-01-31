@@ -41,4 +41,6 @@ public static class CacheKeys
 
     public static string FormUsers(int empresaId)
         => $"form-users:{empresaId}";
+    public static string FormUsersDashboard(int empresaId)
+        => $"dashboard-form-users:{empresaId}";
 }
