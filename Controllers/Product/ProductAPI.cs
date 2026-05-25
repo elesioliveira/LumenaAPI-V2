@@ -42,9 +42,9 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
     {
         const string queryInsert = @"
             INSERT INTO produto 
-            (empresa_id, nome, descricao, ativo, un, codigo_barras, marca_id, fornecedor_id, categoria_id, preco_custo, preco_venda, estoque_minimo) 
+            (empresa_id, nome, descricao, ativo, un, codigo_barras, marca_id, fornecedor_id, categoria_id, preco_custo, preco_venda, estoque_minimo, ncm, cest, origem) 
             VALUES
-            (@empresa_id, @nome, @descricao, @ativo, @un, @codigo_barras, @marca_id, @fornecedor_id, @categoria_id, @preco_custo, @preco_venda, @estoque_minimo)
+            (@empresa_id, @nome, @descricao, @ativo, @un, @codigo_barras, @marca_id, @fornecedor_id, @categoria_id, @preco_custo, @preco_venda, @estoque_minimo, @ncm, @cest, @origem)
             RETURNING id;";
 
         int produtoId;
@@ -63,6 +63,9 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
             cmd.Parameters.AddWithValue("@preco_custo", dto.preco_custo ?? 0);
             cmd.Parameters.AddWithValue("@preco_venda", dto.preco_venda ?? 0);
             cmd.Parameters.AddWithValue("@estoque_minimo", dto.estoque_minimo ?? 0);
+            cmd.Parameters.AddWithValue("@ncm", string.IsNullOrEmpty(dto.ncm) ? DBNull.Value : dto.ncm.Trim());
+            cmd.Parameters.AddWithValue("@cest", string.IsNullOrEmpty(dto.cest) ? DBNull.Value : dto.cest.Trim());
+            cmd.Parameters.AddWithValue("@origem", dto.origem.HasValue ? dto.origem.Value : 0);
 
             produtoId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         }
@@ -103,7 +106,7 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
 
         try
         {
-            string queryUpdateProduct = @"update produto set  nome=@nome,descricao=@descricao,ativo=@ativo,un=@un,codigo_barras=@eanCode,marca_id=@marca_id,fornecedor_id=@fornecedor_id,categoria_id=@categoria_id,preco_custo=@preco_custo,preco_venda=@preco_venda,estoque_minimo=@estoque_minimo
+            string queryUpdateProduct = @"update produto set  nome=@nome,descricao=@descricao,ativo=@ativo,un=@un,codigo_barras=@eanCode,marca_id=@marca_id,fornecedor_id=@fornecedor_id,categoria_id=@categoria_id,preco_custo=@preco_custo,preco_venda=@preco_venda,estoque_minimo=@estoque_minimo,ncm=@ncm,cest=@cest,origem=@origem
             where id =@id and empresa_id=@empresa_id";
 
             await using var cmd = new NpgsqlCommand(queryUpdateProduct, conn, transaction);
@@ -118,6 +121,9 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
             cmd.Parameters.AddWithValue("@preco_custo", dto.preco_custo ?? 0);
             cmd.Parameters.AddWithValue("@preco_venda", dto.preco_venda ?? 0);
             cmd.Parameters.AddWithValue("@estoque_minimo", dto.estoque_minimo ?? 0);
+            cmd.Parameters.AddWithValue("@ncm", string.IsNullOrEmpty(dto.ncm) ? DBNull.Value : dto.ncm.Trim());
+            cmd.Parameters.AddWithValue("@cest", string.IsNullOrEmpty(dto.cest) ? DBNull.Value : dto.cest.Trim());
+            cmd.Parameters.AddWithValue("@origem", dto.origem.HasValue ? dto.origem.Value : 0);
             cmd.Parameters.AddWithValue("@id", dto.id);
             cmd.Parameters.AddWithValue("@empresa_id", empresaId);
 
@@ -162,7 +168,8 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
             var query = @"
             select p.id, p.data_cadastro, p.nome,p.ativo,p.un,p.descricao,p.codigo_barras as eanCode,m.nome as marca,p.marca_id, p.fornecedor_id, f.nome as fornecedor, 
             c.nome as categoria,p.categoria_id,
-            p.preco_custo, p.estoque, p.preco_venda, p.estoque_minimo
+            p.preco_custo, p.estoque, p.preco_venda, p.estoque_minimo,
+            p.ncm, p.cest, p.origem
             from produto p
             left join marca m on m.id = p.marca_id
             left join categoria c on c.id = p.categoria_id
@@ -207,6 +214,9 @@ public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
                     preco_custo = reader.IsDBNull(reader.GetOrdinal("preco_custo")) ? null : reader.GetDecimal(reader.GetOrdinal("preco_custo")),
                     preco_venda = reader.IsDBNull(reader.GetOrdinal("preco_venda")) ? null : reader.GetDecimal(reader.GetOrdinal("preco_venda")),
                     estoque_minimo = reader.IsDBNull(reader.GetOrdinal("estoque_minimo")) ? null : reader.GetDecimal(reader.GetOrdinal("estoque_minimo")),
+                    ncm = reader.IsDBNull(reader.GetOrdinal("ncm")) ? null : reader.GetString(reader.GetOrdinal("ncm")).Trim(),
+                    cest = reader.IsDBNull(reader.GetOrdinal("cest")) ? null : reader.GetString(reader.GetOrdinal("cest")).Trim(),
+                    origem = reader.IsDBNull(reader.GetOrdinal("origem")) ? null : reader.GetInt32(reader.GetOrdinal("origem")),
 
                 });
             }

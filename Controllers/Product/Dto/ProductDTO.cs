@@ -11,5 +11,8 @@ public class ProductDTO
     public decimal? preco_custo { get; set; }
     public decimal? preco_venda { get; set; }
     public decimal? estoque_minimo { get; set; }
+    public string? ncm { get; set; }
+    public string? cest { get; set; }
+    public int? origem { get; set; }
 
 }
