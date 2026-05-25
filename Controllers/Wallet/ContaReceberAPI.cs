@@ -135,6 +135,91 @@ public class WalletReceberAPI : ControllerBase
         }
     }
 
+    [Authorize]
+    [HttpDelete("Delete/Wallet/Conta/{id:int}")]
+    public async Task<IActionResult> DeleteConta(int id)
+    {
+        await using var conn = NovaConexao();
+        await conn.OpenAsync();
+
+        await using var transaction = await conn.BeginTransactionAsync();
+        var empresaId = User.GetEmpresaId();
+        var response = new Response<string>();
+
+        try
+        {
+            const string sqlCheck = @"
+                SELECT origem_id, origem_tipo, status
+                FROM wallet
+                WHERE id = @id AND empresa_id = @empresa_id;
+            ";
+
+            int? origemId = null;
+            string? origemTipo = null;
+            string? statusWallet = null;
+
+            await using (var cmd = new NpgsqlCommand(sqlCheck, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@id", id);
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
+                {
+                    return NotFound(new Response<string>
+                    {
+                        Success = false,
+                        Message = "Conta não encontrada."
+                    });
+                }
+
+                origemId = reader.IsDBNull(reader.GetOrdinal("origem_id"))
+                    ? null
+                    : reader.GetInt32(reader.GetOrdinal("origem_id"));
+                origemTipo = reader.IsDBNull(reader.GetOrdinal("origem_tipo"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("origem_tipo"));
+                statusWallet = reader.IsDBNull(reader.GetOrdinal("status"))
+                    ? null
+                    : reader.GetString(reader.GetOrdinal("status"));
+            }
+
+            if (origemId != null && origemTipo == "Conta a Pagar")
+            {
+                return BadRequest(new Response<string>
+                {
+                    Success = false,
+                    Message = "Esta conta foi gerada por uma movimentação de estoque. Para excluí-la, exclua a movimentação de entrada correspondente."
+                });
+            }
+
+            const string sqlDelete = @"
+                DELETE FROM wallet
+                WHERE id = @id AND empresa_id = @empresa_id;
+            ";
+
+            await using (var cmd = new NpgsqlCommand(sqlDelete, conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@id", id);
+                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            response.Success = true;
+            response.Message = "Conta excluída com sucesso.";
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            response.Success = false;
+            response.Message = ex.Message;
+            return StatusCode(500, response);
+        }
+    }
+
 [Authorize]
 [HttpPut("Put/Wallet/Conta/{id:int}")]
 public async Task<IActionResult> UpdateConta(

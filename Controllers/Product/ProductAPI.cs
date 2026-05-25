@@ -27,70 +27,68 @@ public class ProductAPI : ControllerBase
         => new(_config.GetConnectionString("DefaultConnection"));
 
 
-    [Authorize]
-    [HttpPost("Post/Create/Product")]
-    public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
+[Authorize]
+[HttpPost("Post/Create/Product")]
+public async Task<IActionResult> CreateProduct([FromBody] ProductDTO dto)
+{
+    await using var conn = NovaConexao();
+    await conn.OpenAsync();
+
+    var response = new Response<object>();
+    await using var transaction = await conn.BeginTransactionAsync();
+    var empresaId = User.GetEmpresaId();
+
+    try
     {
-        await using var conn = NovaConexao(); // deve retornar NpgsqlConnection
-        await conn.OpenAsync();
+        const string queryInsert = @"
+            INSERT INTO produto 
+            (empresa_id, nome, descricao, ativo, un, codigo_barras, marca_id, fornecedor_id, categoria_id, preco_custo, preco_venda, estoque_minimo) 
+            VALUES
+            (@empresa_id, @nome, @descricao, @ativo, @un, @codigo_barras, @marca_id, @fornecedor_id, @categoria_id, @preco_custo, @preco_venda, @estoque_minimo)
+            RETURNING id;";
 
-        var response = new Response<string>();
-        await using var transaction = await conn.BeginTransactionAsync();
-        var empresaId = User.GetEmpresaId();
+        int produtoId;
 
-        try
+        await using (var cmd = new NpgsqlCommand(queryInsert, conn, transaction))
         {
-            const string queryInsertFornecedor = @"insert into produto (empresa_id,nome,descricao,ativo,un,codigo_barras,marca_id,fornecedor_id,categoria_id,preco_custo,preco_venda,estoque_minimo) values
-            (@empresa_id,@nome,@descricao,@ativo,@un,@codigo_barras,@marca_id,@fornecedor_id,@categoria_id,@preco_custo,@preco_venda,@estoque_minimo)";
+            cmd.Parameters.AddWithValue("@empresa_id", empresaId);
+            cmd.Parameters.AddWithValue("@nome", string.IsNullOrEmpty(dto.nome) ? DBNull.Value : dto.nome.Trim());
+            cmd.Parameters.AddWithValue("@descricao", string.IsNullOrEmpty(dto.descricao) ? DBNull.Value : dto.descricao.Trim());
+            cmd.Parameters.AddWithValue("@ativo", dto.ativo);
+            cmd.Parameters.AddWithValue("@un", string.IsNullOrEmpty(dto.un) ? DBNull.Value : dto.un.Trim());
+            cmd.Parameters.AddWithValue("@codigo_barras", string.IsNullOrEmpty(dto.eanCode) ? DBNull.Value : dto.eanCode.Trim());
+            cmd.Parameters.AddWithValue("@marca_id", dto.marca_id.HasValue && dto.marca_id.Value > 0 ? dto.marca_id.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@fornecedor_id", dto.fornecedor_id.HasValue && dto.fornecedor_id.Value > 0 ? dto.fornecedor_id.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@categoria_id", dto.categoria_id.HasValue && dto.categoria_id.Value > 0 ? dto.categoria_id.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@preco_custo", dto.preco_custo ?? 0);
+            cmd.Parameters.AddWithValue("@preco_venda", dto.preco_venda ?? 0);
+            cmd.Parameters.AddWithValue("@estoque_minimo", dto.estoque_minimo ?? 0);
 
-            await using (var cmd = new NpgsqlCommand(queryInsertFornecedor, conn, transaction))
-            {
-                cmd.Parameters.AddWithValue("@empresa_id", empresaId);
-                cmd.Parameters.AddWithValue("@nome", string.IsNullOrEmpty(dto.nome) ? DBNull.Value : dto.nome.Trim());
-                cmd.Parameters.AddWithValue("@descricao", string.IsNullOrEmpty(dto.descricao) ? DBNull.Value : dto.descricao.Trim());
-                cmd.Parameters.AddWithValue("@ativo", dto.ativo);
-                cmd.Parameters.AddWithValue("@un", string.IsNullOrEmpty(dto.un) ? DBNull.Value : dto.un.Trim());
-                cmd.Parameters.AddWithValue("@codigo_barras", string.IsNullOrEmpty(dto.eanCode) ? DBNull.Value : dto.eanCode.Trim());
-                cmd.Parameters.AddWithValue("@marca_id", dto.marca_id);
-                cmd.Parameters.AddWithValue("@fornecedor_id", dto.fornecedor_id);
-                cmd.Parameters.AddWithValue("@categoria_id", dto.categoria_id);
-                cmd.Parameters.AddWithValue("@preco_custo", dto.preco_custo ?? 0);
-                cmd.Parameters.AddWithValue("@preco_venda", dto.preco_venda ?? 0);
-                cmd.Parameters.AddWithValue("@estoque_minimo", dto.estoque_minimo ?? 0);
-
-                var rowsAffected = await cmd.ExecuteNonQueryAsync();
-
-                if (rowsAffected == 0)
-                {
-                    await transaction.RollbackAsync();
-                    response.Success = false;
-                    response.Message = "Nenhum registro foi inserido.";
-                    return BadRequest(response);
-                }
-            }
-
-            await transaction.CommitAsync();
-
-            response.Success = true;
-            response.Message = "Produto cadastrado com sucesso.";
-            return Ok(response);
+            produtoId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
         }
-        catch (PostgresException ex) when (ex.SqlState == "23505")
-        {
-            await transaction.RollbackAsync();
-            response.Success = false;
-            response.Message = "Já existe um produto cadastrado com este nome.";
-            return BadRequest(response);
-        }
-        catch (Exception ex)
-        {
-            await transaction.RollbackAsync();
-            response.Success = false;
-            response.Message = $"Erro ao cadastrar produto: {ex.Message}";
-            return StatusCode(500, response);
-        }
+
+        await transaction.CommitAsync();
+
+        response.Success = true;
+        response.Message = "Produto cadastrado com sucesso.";
+        response.Data = new { id = produtoId };
+        return Ok(response);
     }
-
+    catch (PostgresException ex) when (ex.SqlState == "23505")
+    {
+        await transaction.RollbackAsync();
+        response.Success = false;
+        response.Message = "Já existe um produto cadastrado com este nome.";
+        return BadRequest(response);
+    }
+    catch (Exception ex)
+    {
+        await transaction.RollbackAsync();
+        response.Success = false;
+        response.Message = $"Erro ao cadastrar produto: {ex.Message}";
+        return StatusCode(500, response);
+    }
+}
     [Authorize]
     [HttpPut("Put/Update/Product")]
     public async Task<IActionResult> UpdateMark([FromBody] ProductEntity dto)
