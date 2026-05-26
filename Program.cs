@@ -22,6 +22,15 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddHttpClient<IGtinTokenService, GtinTokenService>();
 builder.Services.AddHttpClient<IGtinProdutoService, GtinProdutoService>();
+
+builder.Services.AddSingleton<ICertificateService, CertificateService>();
+builder.Services.AddSingleton<IXmlBuilderService, XmlBuilderService>();
+builder.Services.AddSingleton<IXmlSignerService, XmlSignerService>();
+builder.Services.AddSingleton<ISefazClientService, SefazClientService>();
+builder.Services.AddSingleton<IDanfeService, DanfeService>();
+builder.Services.AddSingleton<IDanfceService, DanfceService>();
+builder.Services.AddSingleton<IQrCodeService, QrCodeService>();
+
 builder.Services.AddControllers();
 
 // CORS para Dev + Cookies
@@ -85,6 +94,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 // Swagger ativado apenas em DEV (mas você decide)
 if (app.Environment.IsDevelopment())
