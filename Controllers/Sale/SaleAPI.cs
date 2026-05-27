@@ -573,7 +573,7 @@ public class SaleAPI : ControllerBase
                     .Value = "Dinheiro";
 
                 cmd.Parameters.Add("@descricao", NpgsqlTypes.NpgsqlDbType.Text)
-                    .Value = $"Pedido n- {vendaId}";
+                    .Value = $"Pedido n- {ultimo_pedido}";
 
                 cmd.Parameters.Add("@observacao", NpgsqlTypes.NpgsqlDbType.Text)
                     .Value = (object?)dto.observacao ?? DBNull.Value;

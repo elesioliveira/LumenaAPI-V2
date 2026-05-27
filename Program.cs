@@ -31,7 +31,12 @@ builder.Services.AddSingleton<IDanfeService, DanfeService>();
 builder.Services.AddSingleton<IDanfceService, DanfceService>();
 builder.Services.AddSingleton<IQrCodeService, QrCodeService>();
 
-builder.Services.AddControllers();
+builder.Services.AddScoped<ValidarLicencaFilter>();
+
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ValidarLicencaFilter>();
+});
 
 // CORS para Dev + Cookies
 builder.Services.AddCors(options =>
