@@ -36,6 +36,7 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
         u.id,
         u.empresa_id,
         u.data_cadastro,
+        u.perfil,
         u.nome,
         u.email,
         u.senha_hash,
@@ -77,6 +78,7 @@ public async Task<IActionResult> Login([FromBody] LoginDTO dto)
             empresaid = reader.GetInt32(reader.GetOrdinal("empresa_id")),
             datacadastro = reader.GetDateTime(reader.GetOrdinal("data_cadastro")),
             nome = reader.GetString(reader.GetOrdinal("nome")),
+            perfil = reader.GetString(reader.GetOrdinal("perfil")),
             email = reader.GetString(reader.GetOrdinal("email")),
             ativo = reader.GetBoolean(reader.GetOrdinal("ativo")),
             rotas = JsonSerializer.Deserialize<List<int>>(rotasJson) ?? new()

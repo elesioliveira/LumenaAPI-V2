@@ -4,6 +4,7 @@ public class UsuarioEntity
     public int empresaid { get; set; }
     public DateTime datacadastro { get; set; }
     public string? nome { get; set; }
+    public string? perfil { get; set; }
     public string? email { get; set; }
     public bool ativo { get; set; }
     

@@ -95,11 +95,25 @@ public async Task<IActionResult> CadastrarEmpresa([FromBody] EmpresaUsuarioCreat
             await cmd2.ExecuteNonQueryAsync();
         }
 
+        // ---------- SEQUÊNCIAS FISCAIS (NFe + NFCe) ----------
+        const string insertNfeSequencia = @"
+            INSERT INTO empresa_nfe_sequencia (empresa_id, modelo, serie, ultimo_numero)
+            VALUES
+            (@empresa_id, 55, 1, 0),
+            (@empresa_id, 65, 1, 0);
+        ";
+
+        await using (var cmd3 = new NpgsqlCommand(insertNfeSequencia, conn, transaction))
+        {
+            cmd3.Parameters.AddWithValue("@empresa_id", empresaId);
+            await cmd3.ExecuteNonQueryAsync();
+        }
+
         // ---------- ROTAS (ADMIN = TODAS) ----------
         const string insertRotas = @"
             INSERT INTO rota_usuario (rota, id_usuario)
             SELECT r, @id_usuario
-            FROM generate_series(0, 9) AS r;
+            FROM generate_series(0, 10) AS r;
         ";
 
         await using (var cmd = new NpgsqlCommand(insertRotas, conn, transaction))

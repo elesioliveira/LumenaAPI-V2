@@ -4,6 +4,8 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls(builder.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5037");
+
 //  JWT Config
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
@@ -38,16 +40,18 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<ValidarLicencaFilter>();
 });
 
-// CORS para Dev + Cookies
+var corsOrigins = builder.Configuration["CORS_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? ["http://localhost:5173"];
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DevPolicy", cors =>
+    options.AddPolicy("AppPolicy", cors =>
     {
         cors
-            .WithOrigins("http://localhost:5173")
+            .WithOrigins(corsOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials(); // cookies permitidos
+            .AllowCredentials();
     });
 });
 
@@ -116,7 +120,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 //  CORS sempre antes de Auth
-app.UseCors("DevPolicy");
+app.UseCors("AppPolicy");
 app.UseStaticFiles();
 // 🔐 Auth
 app.UseAuthentication();
